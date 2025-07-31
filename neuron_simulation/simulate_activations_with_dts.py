@@ -1,4 +1,3 @@
-# import cuml
 import torch
 import numpy as np
 import einops
@@ -20,7 +19,8 @@ import pickle
 import itertools
 from importlib import resources
 
-from xgboost import XGBRegressor, XGBClassifier
+# from xgboost import XGBRegressor, XGBClassifier
+# import cuml
 
 import circuits.utils as utils
 import circuits.othello_utils as othello_utils
@@ -814,22 +814,8 @@ def compute_predictors(
 
         print(f"\n{func_name}")
 
-        # layer_results = Parallel(n_jobs=num_cores)(
-        #     delayed(process_layer_simple)(
-        #         layer,
-        #         data[layer],
-        #         func_name,
-        #         neuron_acts[layer],
-        #         binary_acts[layer],
-        #         max_depth,
-        #         binary_dt,
-        #     )
-        #     for layer in layers
-        # )
-
-        # for layer_result in layer_results:
-        for layer in layers:
-            layer_result = process_layer_simple(
+        layer_results = Parallel(n_jobs=num_cores)(
+            delayed(process_layer_simple)(
                 layer,
                 data[layer],
                 func_name,
@@ -838,16 +824,16 @@ def compute_predictors(
                 max_depth,
                 binary_dt,
             )
+            for layer in layers
+        )
+
+        for layer_result in layer_results:
             if layer_result is not None:
                 layer = layer_result["layer"]
                 results[layer][custom_function.__name__] = {
                     "decision_tree": layer_result["regular_dt"],
                     "binary_decision_tree": layer_result["binary_dt"],
                 }
-
-                if save_results:
-                    with open(output_filename, "wb") as f:
-                        pickle.dump(results, f)
 
         # with ProcessPoolExecutor(max_workers=num_cores) as executor:
         #     future_to_layer = {executor.submit(process_layer, layer, games_BLC, neuron_acts, binary_acts): layer for layer in layers}
@@ -859,9 +845,9 @@ def compute_predictors(
         #             'binary_decision_tree': layer_result['binary_dt']
         #         }
 
-    # if save_results:
-    #     with open(output_filename, "wb") as f:
-    #         pickle.dump(results, f)
+    if save_results:
+        with open(output_filename, "wb") as f:
+            pickle.dump(results, f)
     return results
 
 

@@ -15,7 +15,7 @@ from transformer_lens.utils import to_numpy
 from torch import Tensor
 from IPython.display import HTML, display
 from jaxtyping import Bool, Float, Int
-import neel_utils as neel_utils
+import neuron_simulation.neel_utils as neel_utils
 
 device = "cuda" if t.cuda.is_available() else "cpu"
 t.set_grad_enabled(False)
