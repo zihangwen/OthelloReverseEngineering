@@ -307,8 +307,8 @@ def games_batch_to_input_tokens_classifier_input_BLC(batch_str_moves: list[list[
             state[64:128] = occupied_64
 
             offset = 128
-            row = i // 8
-            col = i % 8
+            row = move // 8
+            col = move % 8
             state[offset + 0] = row
             state[offset + 1] = col
             state[offset + 2] = i
