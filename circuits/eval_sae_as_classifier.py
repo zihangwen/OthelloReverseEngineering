@@ -121,7 +121,7 @@ def construct_othello_dataset(
         func_name = custom_function.__name__
         data[func_name] = custom_function(decoded_othello_inputs_bL)
 
-    return data
+    return to_device(data, device) # changed by zihangw
 
 
 def initialize_results_dict(

@@ -1,3 +1,4 @@
+# import cuml
 import torch
 import numpy as np
 import einops
@@ -19,7 +20,7 @@ import pickle
 import itertools
 from importlib import resources
 
-# from xgboost import XGBRegressor, XGBClassifier
+from xgboost import XGBRegressor, XGBClassifier
 
 import circuits.utils as utils
 import circuits.othello_utils as othello_utils
@@ -256,7 +257,7 @@ def cache_sae_activations(
         data_batch = data["encoded_inputs"][batch_start:batch_end]
         data_batch = torch.tensor(data_batch, device=device)
 
-        ae_dict = utils.to_device(ae_dict, "cuda")
+        ae_dict = utils.to_device(ae_dict, device=device) # changed by zihangw
         acts = {}
         with model.trace(data_batch, **tracer_kwargs):
             for layer in layers:
@@ -452,14 +453,14 @@ def compute_top_n_accuracy(
             top_n_mask[b, l, top_n_indices] = True
 
     top_n_mask = top_n_mask.int()
-    stoi_top_n_mask = torch.zeros(B, L, (V + 4), dtype=torch.int32)
+    stoi_top_n_mask = torch.zeros(B, L, (V + 4), dtype=torch.int32, device=top_n_mask.device)
 
     # This is so cursed. OthelloGPT has D vocab 61 (ignoring center squares, with pass at idx 0)
     stoi_top_n_mask[:, :, :28] = top_n_mask[:, :, :28]
     stoi_top_n_mask[:, :, 30:36] = top_n_mask[:, :, 28:34]
     stoi_top_n_mask[:, :, 38:] = top_n_mask[:, :, 34:]
 
-    pass_BL1 = torch.zeros(B, L, 1, dtype=torch.int32)
+    pass_BL1 = torch.zeros(B, L, 1, dtype=torch.int32, device=valid_moves_BLC.device)
 
     valid_moves_with_pass_BLC = torch.cat([pass_BL1, valid_moves_BLC], dim=-1)
 
@@ -469,7 +470,7 @@ def compute_top_n_accuracy(
     total = valid_moves_with_pass_BLC.sum()
     accuracy = correct / total
 
-    return correct, total, accuracy
+    return correct.item(), total.item(), accuracy.item()
 
 
 def add_output_folders():
@@ -595,6 +596,87 @@ def process_layer_xgb(
             "f1": xgb_f1,
         },
     }
+
+    return layer_results
+
+def process_layer_simple(
+    layer: int,
+    data_layer: dict,
+    func_name: str,
+    neuron_acts_layer,
+    binary_acts_layer,
+    max_depth: int,
+    binary_dt: bool,
+    linear_reg: bool = False,
+    regular_dt: bool = True,
+    random_seed: int = 42,
+) -> dict:
+    print(f"\nLayer {layer}")
+
+    games_BLC = data_layer[func_name]
+    games_BLC = utils.to_device(games_BLC, "cpu")
+
+    layer_results = {"layer": layer}
+
+    if regular_dt:
+        X_train, X_test, y_train, y_test = prepare_data(games_BLC, neuron_acts_layer)
+
+        # Decision Tree
+        # cmlt_model = cuml.ensemble.RandomForestRegressor(n_estimators=1, bootstrap=False, random_state=random_seed, max_depth=max_depth)
+        # cmlt_model, cmlt_mse, cmlt_r2 = train_and_evaluate(
+        #     cmlt_model, X_train, X_test, y_train, y_test
+        # )
+        dt_model, dt_mse, dt_r2 = train_and_evaluate(
+            MultiOutputRegressor(
+                DecisionTreeRegressor(
+                    random_state=random_seed,
+                    max_depth=max_depth,  # min_samples_leaf=5, min_samples_split=5
+                )
+            ),
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+        )
+
+        dt_mse, dt_r2 = calculate_neuron_metrics(dt_model, X_test, y_test)
+        layer_results["regular_dt"] = {"model": dt_model, "mse": dt_mse, "r2": dt_r2}
+    else:
+        layer_results["regular_dt"] = {"mse": None, "r2": None}
+
+    if binary_dt:
+        # Binary Decision Tree
+        X_binary_train, X_binary_test, y_binary_train, y_binary_test = prepare_data(
+            games_BLC, binary_acts_layer
+        )
+        dt_binary_model = MultiOutputClassifier(
+            DecisionTreeClassifier(
+                random_state=random_seed,
+                max_depth=max_depth,  # min_samples_leaf=5, min_samples_split=5
+            )
+        )
+        dt_binary_model.fit(X_binary_train, y_binary_train)
+
+        accuracy, precision, recall, f1 = calculate_binary_metrics(
+            dt_binary_model, X_binary_test, y_binary_test
+        )
+        layer_results["binary_dt"] = {
+            "model": dt_binary_model,
+            "accuracy": accuracy,
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+        }
+    else:
+        layer_results["binary_dt"] = {"accuracy": None, "f1": None}
+
+    if linear_reg:
+        lasso_model, lasso_mse, lasso_r2 = train_and_evaluate(
+            Lasso(alpha=0.005), X_train, X_test, y_train, y_test
+        )
+        layer_results["lasso"] = {"model": lasso_model, "mse": lasso_mse, "r2": lasso_r2}
+
+    print(f"Finished Layer {layer}")
 
     return layer_results
 
@@ -732,26 +814,40 @@ def compute_predictors(
 
         print(f"\n{func_name}")
 
-        layer_results = Parallel(n_jobs=num_cores)(
-            delayed(process_layer)(
+        # layer_results = Parallel(n_jobs=num_cores)(
+        #     delayed(process_layer_simple)(
+        #         layer,
+        #         data[layer],
+        #         func_name,
+        #         neuron_acts[layer],
+        #         binary_acts[layer],
+        #         max_depth,
+        #         binary_dt,
+        #     )
+        #     for layer in layers
+        # )
+
+        # for layer_result in layer_results:
+        for layer in layers:
+            layer_result = process_layer_simple(
                 layer,
-                data,
+                data[layer],
                 func_name,
-                neuron_acts,
-                binary_acts,
+                neuron_acts[layer],
+                binary_acts[layer],
                 max_depth,
                 binary_dt,
             )
-            for layer in layers
-        )
-
-        for layer_result in layer_results:
             if layer_result is not None:
                 layer = layer_result["layer"]
                 results[layer][custom_function.__name__] = {
                     "decision_tree": layer_result["regular_dt"],
                     "binary_decision_tree": layer_result["binary_dt"],
                 }
+
+                if save_results:
+                    with open(output_filename, "wb") as f:
+                        pickle.dump(results, f)
 
         # with ProcessPoolExecutor(max_workers=num_cores) as executor:
         #     future_to_layer = {executor.submit(process_layer, layer, games_BLC, neuron_acts, binary_acts): layer for layer in layers}
@@ -763,9 +859,9 @@ def compute_predictors(
         #             'binary_decision_tree': layer_result['binary_dt']
         #         }
 
-    if save_results:
-        with open(output_filename, "wb") as f:
-            pickle.dump(results, f)
+    # if save_results:
+    #     with open(output_filename, "wb") as f:
+    #         pickle.dump(results, f)
     return results
 
 
@@ -1221,6 +1317,8 @@ if __name__ == "__main__":
     start_time = time.time()
     default_config = sim_config.selected_config
     # default_config = sim_config.test_config
+    default_config.save_decision_trees = True # changed by zihangw
+    # default_config.binary_dt = True  # changed by zihangw
 
     # Here you select which functions are going to be used as input to training the decision trees
     # We will iterate over every one
@@ -1245,7 +1343,8 @@ if __name__ == "__main__":
 
     # example config change
     # 6 batches seems to work reasonably well for training decision trees
-    default_config.n_batches = 6
+    default_config.n_batches = 60
+    default_config.batch_size = 100
     # default_config.batch_size = 10
     run_simulations(default_config)
     print(f"--- {time.time() - start_time} seconds ---")

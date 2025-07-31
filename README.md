@@ -1,6 +1,6 @@
 **Setup** 
 
-Create a new virtual python environment (I'm using 3.11).
+Create a new virtual python environment (I'm using 3.12).
 
 ```
 
