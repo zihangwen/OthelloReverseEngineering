@@ -28,7 +28,7 @@ from circuits.eval_sae_as_classifier import construct_othello_dataset
 import neuron_simulation.simulation_config as sim_config
 
 # Setup
-device = "cuda:0" if torch.cuda.is_available() else "cpu"
+device = "cuda:1" if torch.cuda.is_available() else "cpu"
 torch.set_grad_enabled(False)
 tracer_kwargs = {"validate": False, "scan": False}
 tracer_kwargs = {"validate": True, "scan": True}
@@ -1329,8 +1329,8 @@ if __name__ == "__main__":
 
     # example config change
     # 6 batches seems to work reasonably well for training decision trees
-    default_config.n_batches = 60
-    default_config.batch_size = 100
+    default_config.n_batches = 6
+    default_config.batch_size = 10
     # default_config.batch_size = 10
     run_simulations(default_config)
     print(f"--- {time.time() - start_time} seconds ---")
