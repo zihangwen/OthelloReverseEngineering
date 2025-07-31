@@ -28,7 +28,7 @@ from circuits.eval_sae_as_classifier import construct_othello_dataset
 import neuron_simulation.simulation_config as sim_config
 
 # Setup
-device = "cuda:1" if torch.cuda.is_available() else "cpu"
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch.set_grad_enabled(False)
 tracer_kwargs = {"validate": False, "scan": False}
 tracer_kwargs = {"validate": True, "scan": True}
@@ -947,28 +947,77 @@ def append_binary_neuron_activations_to_test_data(
     return test_data
 
 
-def simulate_activations(
-    data: dict, decision_trees: dict, intervention_layers: list[list[int]], func_name: str
+# def simulate_activations(
+#     data: dict, decision_trees: dict, intervention_layers: list[list[int]], func_name: str
+# ) -> dict[int, torch.Tensor]:
+#     simulated_activations = {}
+#     all_layers = list(set(int for sublist in intervention_layers for int in sublist))
+
+#     for layer in all_layers:
+#         board_state_BLC = data[layer][func_name]
+#         B, L, C = board_state_BLC.shape
+#         X = einops.rearrange(board_state_BLC, "b l c -> (b l) c").cpu().numpy()
+
+#         decision_tree = decision_trees[layer][func_name]["decision_tree"]["model"]
+#         simulated_activations_BF = decision_tree.predict(X)
+#         simulated_activations_BF = torch.tensor(
+#             simulated_activations_BF, device=device, dtype=torch.float32
+#         )
+#         simulated_activations_BLF = einops.rearrange(
+#             simulated_activations_BF, "(b l) f -> b l f", b=B, l=L
+#         )
+#         simulated_activations[layer] = simulated_activations_BLF
+
+#     return simulated_activations
+
+
+# def simulate_save_activations(
+#     decision_trees: dict,
+#     input_location: str,
+#     intervention_layers: list[list[int]],
+#     func_name: str,
+#     data: dict,
+#     dataset_size: int,
+#     force_recompute: bool,
+#     output_location: str,
+# ):
+#     all_layers = list(set(int for sublist in intervention_layers for int in sublist))
+#     for layer in all_layers:
+#         output_filename = (
+#             f"{output_location}decision_trees/dt_activations_{input_location}_{dataset_size}/layer_{layer}.pkl"
+#         )
+        
+#         if not force_recompute and os.path.exists(output_filename):
+#             print(f"decision tree activations for layer {layer} already exists.")
+#             continue
+        
+#         output_dir = os.path.dirname(output_filename)
+#         os.makedirs(output_dir, exist_ok=True)
+
+#         simulated_activation = simulate_activation(
+#             data[layer], decision_trees[layer], func_name
+#         )
+#         with open(output_filename, "wb") as f:
+#             pickle.dump(simulated_activation, f)
+
+
+def simulate_activation(
+    data_layer: dict, decision_trees_layer: dict, func_name: str
 ) -> dict[int, torch.Tensor]:
-    simulated_activations = {}
-    all_layers = list(set(int for sublist in intervention_layers for int in sublist))
+    board_state_BLC = data_layer[func_name]
+    B, L, C = board_state_BLC.shape
+    X = einops.rearrange(board_state_BLC, "b l c -> (b l) c").cpu().numpy()
 
-    for layer in all_layers:
-        board_state_BLC = data[layer][func_name]
-        B, L, C = board_state_BLC.shape
-        X = einops.rearrange(board_state_BLC, "b l c -> (b l) c").cpu().numpy()
+    decision_tree = decision_trees_layer[func_name]["decision_tree"]["model"]
+    simulated_activations_BF = decision_tree.predict(X)
+    simulated_activations_BF = torch.tensor(
+        simulated_activations_BF, dtype=torch.float32
+    )
+    simulated_activations_BLF = einops.rearrange(
+        simulated_activations_BF, "(b l) f -> b l f", b=B, l=L
+    )
 
-        decision_tree = decision_trees[layer][func_name]["decision_tree"]["model"]
-        simulated_activations_BF = decision_tree.predict(X)
-        simulated_activations_BF = torch.tensor(
-            simulated_activations_BF, device=device, dtype=torch.float32
-        )
-        simulated_activations_BLF = einops.rearrange(
-            simulated_activations_BF, "(b l) f -> b l f", b=B, l=L
-        )
-        simulated_activations[layer] = simulated_activations_BLF
-
-    return simulated_activations
+    return simulated_activations_BLF
 
 
 def perform_interventions(
@@ -985,6 +1034,10 @@ def perform_interventions(
     ae_dict: dict,
     submodule_dict: dict,
     hyperparameters: dict,
+    dataset_size: int,
+    force_recompute: bool,
+    output_location: str,
+    save_sim_activations: bool = False,
 ):
     ablations = {"results": {}}
 
@@ -1000,18 +1053,29 @@ def perform_interventions(
         d_model = 512
 
     for idx, custom_function in enumerate(custom_functions):
-        simulated_activations = {}
-        if ablation_method == "dt":
-            simulated_activations = simulate_activations(
-                data, decision_trees, intervention_layers, custom_function.__name__
-            )
-        else:
+        if ablation_method != "dt" and idx > 0:
             # If e.g. mean ablating, we don't need to mean ablate for every custom function
-            if idx > 0:
-                continue
+            continue
+        # if save_sim_activations and ablation_method == "dt":
+        #     simulate_save_activations(
+        #         decision_trees,
+        #         input_location,
+        #         intervention_layers,
+        #         custom_function.__name__,
+        #         data,
+        #         dataset_size,
+        #         force_recompute,
+        #         output_location,
+        #     )
+        # else:
+        #     # If e.g. mean ablating, we don't need to mean ablate for every custom function
+        #     if idx > 0:
+        #         continue
 
         for selected_layers in intervention_layers:
             selected_features = {}
+            simulated_activations = {}
+            torch.cuda.empty_cache()
 
             for layer in selected_layers:
                 if (
@@ -1024,9 +1088,28 @@ def perform_interventions(
                     all_f1s = decision_trees[layer][custom_function.__name__]["decision_tree"]["r2"]
                     good_f1s = all_f1s > threshold
                     selected_features[layer] = good_f1s
+
+                    output_filename = (
+                        f"{output_location}decision_trees/dt_activations_{input_location}_{dataset_size}/layer_{layer}.pkl"
+                    )
+                    if not force_recompute and os.path.exists(output_filename):
+                        print(f"decision tree activations for layer {layer} already exists and loading.")
+                        with open(output_filename, "rb") as f:
+                            simulated_activations[layer] = pickle.load(f)
+                    else:
+                        simulated_activation = simulate_activation(
+                            data[layer], decision_trees[layer], custom_function.__name__
+                        )
+                        simulated_activations[layer] = simulated_activation
+                        if save_sim_activations:
+                            os.makedirs(os.path.dirname(output_filename), exist_ok=True)
+                            with open(output_filename, "wb") as f:
+                                pickle.dump(simulated_activation, f)
                 else:
                     raise ValueError(f"Invalid ablation method: {ablation_method}")
-
+            
+            simulated_activations = utils.to_device(simulated_activations, device)
+            
             logits_clean_BLV, logits_patch_BLV = interventions(
                 model=model,
                 train_data=data,
@@ -1089,6 +1172,8 @@ def perform_interventions(
             ablations["results"][layers_key][custom_function.__name__]["patch_accuracy"] = (
                 patch_accuracy
             )
+
+            torch.cuda.empty_cache()
 
     hyperparameters["ablation_method"] = ablation_method
     hyperparameters["ablate_not_selected"] = ablate_not_selected
@@ -1291,6 +1376,9 @@ def run_simulations(config: sim_config.SimulationConfig):
                     ae_dict=ae_list,
                     submodule_dict=submodule_dict,
                     hyperparameters=individual_hyperparameters.copy(),
+                    dataset_size=dataset_size,
+                    force_recompute=config.force_recompute,
+                    output_location=config.output_location,
                 )
 
                 ablation_filename = f"{config.output_location}decision_trees/ablation_results_{input_location}_{ablation_method}_ablate_not_selected_{ablate_not_selected}_add_error_{add_error}_trainer_{trainer_id}_inputs_{dataset_size}.pkl"
@@ -1330,7 +1418,6 @@ if __name__ == "__main__":
     # example config change
     # 6 batches seems to work reasonably well for training decision trees
     default_config.n_batches = 6
-    default_config.batch_size = 10
-    # default_config.batch_size = 10
+    default_config.batch_size = 100
     run_simulations(default_config)
     print(f"--- {time.time() - start_time} seconds ---")
