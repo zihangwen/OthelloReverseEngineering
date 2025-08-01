@@ -283,7 +283,7 @@ def board_to_occupied_64(board_state) -> t.Tensor:
 
 
 def games_batch_to_input_tokens_classifier_input_BLC(batch_str_moves: list[list[int]]) -> t.Tensor:
-    """Shape batch, seq len, classes, where classes = (64 + 64 + 60 + 5)
+    """Shape batch, seq len, classes, where classes = (64 + 64 + 5)
     The first 64 is one hot, indicates which square the player just moved to
     The second 64 indicates which squares are occupied
     NOTE: board.umpire() is after appending state, so it's occupied squares before the move

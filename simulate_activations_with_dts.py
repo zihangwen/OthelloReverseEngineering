@@ -19,7 +19,7 @@ import pickle
 import itertools
 from importlib import resources
 
-from xgboost import XGBRegressor, XGBClassifier
+# from xgboost import XGBRegressor, XGBClassifier
 # import cuml
 
 import circuits.utils as utils
@@ -1417,7 +1417,7 @@ if __name__ == "__main__":
 
     # example config change
     # 6 batches seems to work reasonably well for training decision trees
-    default_config.n_batches = 6
+    default_config.n_batches = 60
     default_config.batch_size = 100
     run_simulations(default_config)
     print(f"--- {time.time() - start_time} seconds ---")
