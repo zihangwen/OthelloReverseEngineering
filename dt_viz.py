@@ -66,7 +66,7 @@ def get_neuron_decision_tree(data: dict, layer: int, neuron_idx: int, function_n
 
 def create_placeholder_feature_names(n_features: int) -> List[str]:
     """Create feature names based on the actual feature structure:
-    (64 + 64 + 5) + (192) + (64) = 389 dimensional vector
+    (192) + (64 + 64 + 5) + (64) = 389 dimensional vector
     - Last move: 64 one-hot move + 64 pre-occupied + 5 coordinates  
     - Board state: 192 one-hot (8x8x3 mine/empty/theirs)
     - Flipped moves: 64 binary encoding of flipped squares
@@ -76,7 +76,25 @@ def create_placeholder_feature_names(n_features: int) -> List[str]:
     feature_names = []
     idx = 0
     
-    # First 64: Last move one-hot encoding (A0-H7)
+    # First 192: Board state (8x8x3 = mine/empty/theirs)
+    for square_idx in range(min(64, (n_features - idx) // 3)):
+        row = square_idx // 8  
+        col = square_idx % 8
+        square = chr(ord('A') + col) + str(row)
+        
+        # Add the 3 states for this square
+        if idx < n_features:
+            feature_names.append(f"{square}_theirs")
+            idx += 1
+        if idx < n_features:
+            feature_names.append(f"{square}_empty") 
+            idx += 1
+        if idx < n_features:
+            feature_names.append(f"{square}_mine")
+            idx += 1
+
+    
+    # Next 64: Last move one-hot encoding (A0-H7)
     for i in range(min(64, n_features - idx)):
         row = i // 8
         col = i % 8
@@ -93,27 +111,10 @@ def create_placeholder_feature_names(n_features: int) -> List[str]:
         idx += 1
     
     # Next 5: Move coordinates and player info
-    coord_names = ["move_row", "move_col", "move_number", "black_played", "white_played"]
+    coord_names = ["move_row", "move_col", "move_number", "white_played", "black_played"]
     for i in range(min(5, n_features - idx)):
         feature_names.append(coord_names[i])
         idx += 1
-    
-    # Next 192: Board state (8x8x3 = mine/empty/theirs)
-    for square_idx in range(min(64, (n_features - idx) // 3)):
-        row = square_idx // 8  
-        col = square_idx % 8
-        square = chr(ord('A') + col) + str(row)
-        
-        # Add the 3 states for this square
-        if idx < n_features:
-            feature_names.append(f"{square}_mine")
-            idx += 1
-        if idx < n_features:
-            feature_names.append(f"{square}_empty") 
-            idx += 1
-        if idx < n_features:
-            feature_names.append(f"{square}_theirs")
-            idx += 1
     
     # Last 64: Flipped squares (A0-H7)
     for i in range(min(64, n_features - idx)):

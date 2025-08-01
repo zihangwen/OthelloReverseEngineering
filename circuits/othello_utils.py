@@ -287,7 +287,7 @@ def games_batch_to_input_tokens_classifier_input_BLC(batch_str_moves: list[list[
     The first 64 is one hot, indicates which square the player just moved to
     The second 64 indicates which squares are occupied
     NOTE: board.umpire() is after appending state, so it's occupied squares before the move
-    The last 5 are ints indicating the row, col, time position, is_black, is_white"""
+    The last 5 are ints indicating the row, col, time position, is_white, is_black"""
     iterable = tqdm(batch_str_moves) if len(batch_str_moves) > 50 else batch_str_moves
 
     game_stack = []
