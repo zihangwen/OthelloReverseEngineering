@@ -421,7 +421,8 @@ def games_batch_to_board_state_and_input_tokens_classifier_input_BLC(
     batch_str_moves: list[list[int]],
 ) -> t.Tensor:
     input_tokens_BLC = games_batch_to_input_tokens_classifier_input_BLC(batch_str_moves)
-    board_state_BLC = games_batch_to_board_state_classifier_input_BLC(batch_str_moves)
+    # board_state_BLC = games_batch_to_board_state_classifier_input_BLC(batch_str_moves)
+    board_state_BLC = games_batch_to_previous_board_state_classifier_input_BLC(batch_str_moves)
     return t.cat([board_state_BLC, input_tokens_BLC], dim=-1)
 
 
