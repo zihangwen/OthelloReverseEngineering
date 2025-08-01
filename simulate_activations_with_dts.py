@@ -846,8 +846,9 @@ def compute_predictors(
         #         }
 
     if save_results:
-        with open(output_filename, "wb") as f:
-            pickle.dump(results, f)
+        update_results_dict(output_filename, results)
+        # with open(output_filename, "wb") as f:
+        #     pickle.dump(results, f)
     return results
 
 
@@ -914,8 +915,9 @@ def compute_predictors_iterative(
                 )
 
     if save_results:
-        with open(output_filename, "wb") as f:
-            pickle.dump(results, f)
+        update_results_dict(output_filename, results)
+        # with open(output_filename, "wb") as f:
+        #     pickle.dump(results, f)
     return results
 
 
@@ -945,60 +947,6 @@ def append_binary_neuron_activations_to_test_data(
                     dim=-1,
                 )
     return test_data
-
-
-# def simulate_activations(
-#     data: dict, decision_trees: dict, intervention_layers: list[list[int]], func_name: str
-# ) -> dict[int, torch.Tensor]:
-#     simulated_activations = {}
-#     all_layers = list(set(int for sublist in intervention_layers for int in sublist))
-
-#     for layer in all_layers:
-#         board_state_BLC = data[layer][func_name]
-#         B, L, C = board_state_BLC.shape
-#         X = einops.rearrange(board_state_BLC, "b l c -> (b l) c").cpu().numpy()
-
-#         decision_tree = decision_trees[layer][func_name]["decision_tree"]["model"]
-#         simulated_activations_BF = decision_tree.predict(X)
-#         simulated_activations_BF = torch.tensor(
-#             simulated_activations_BF, device=device, dtype=torch.float32
-#         )
-#         simulated_activations_BLF = einops.rearrange(
-#             simulated_activations_BF, "(b l) f -> b l f", b=B, l=L
-#         )
-#         simulated_activations[layer] = simulated_activations_BLF
-
-#     return simulated_activations
-
-
-# def simulate_save_activations(
-#     decision_trees: dict,
-#     input_location: str,
-#     intervention_layers: list[list[int]],
-#     func_name: str,
-#     data: dict,
-#     dataset_size: int,
-#     force_recompute: bool,
-#     output_location: str,
-# ):
-#     all_layers = list(set(int for sublist in intervention_layers for int in sublist))
-#     for layer in all_layers:
-#         output_filename = (
-#             f"{output_location}decision_trees/dt_activations_{input_location}_{dataset_size}/layer_{layer}.pkl"
-#         )
-        
-#         if not force_recompute and os.path.exists(output_filename):
-#             print(f"decision tree activations for layer {layer} already exists.")
-#             continue
-        
-#         output_dir = os.path.dirname(output_filename)
-#         os.makedirs(output_dir, exist_ok=True)
-
-#         simulated_activation = simulate_activation(
-#             data[layer], decision_trees[layer], func_name
-#         )
-#         with open(output_filename, "wb") as f:
-#             pickle.dump(simulated_activation, f)
 
 
 def simulate_activation(
@@ -1056,21 +1004,6 @@ def perform_interventions(
         if ablation_method != "dt" and idx > 0:
             # If e.g. mean ablating, we don't need to mean ablate for every custom function
             continue
-        # if save_sim_activations and ablation_method == "dt":
-        #     simulate_save_activations(
-        #         decision_trees,
-        #         input_location,
-        #         intervention_layers,
-        #         custom_function.__name__,
-        #         data,
-        #         dataset_size,
-        #         force_recompute,
-        #         output_location,
-        #     )
-        # else:
-        #     # If e.g. mean ablating, we don't need to mean ablate for every custom function
-        #     if idx > 0:
-        #         continue
 
         for selected_layers in intervention_layers:
             selected_features = {}
@@ -1092,19 +1025,19 @@ def perform_interventions(
                     output_filename = (
                         f"{output_location}decision_trees/dt_activations_{input_location}_{dataset_size}/layer_{layer}.pkl"
                     )
-                    if not force_recompute and os.path.exists(output_filename):
-                        print(f"decision tree activations for layer {layer} already exists and loading.")
-                        with open(output_filename, "rb") as f:
-                            simulated_activations[layer] = pickle.load(f)
-                    else:
-                        simulated_activation = simulate_activation(
-                            data[layer], decision_trees[layer], custom_function.__name__
-                        )
-                        simulated_activations[layer] = simulated_activation
-                        if save_sim_activations:
-                            os.makedirs(os.path.dirname(output_filename), exist_ok=True)
-                            with open(output_filename, "wb") as f:
-                                pickle.dump(simulated_activation, f)
+                    # if not force_recompute and os.path.exists(output_filename):
+                    #     print(f"decision tree activations for layer {layer} already exists and loading.")
+                    #     with open(output_filename, "rb") as f:
+                    #         simulated_activations[layer] = pickle.load(f)
+                    #     continue
+                    simulated_activation = simulate_activation(
+                        data[layer], decision_trees[layer], custom_function.__name__
+                    )
+                    simulated_activations[layer] = simulated_activation
+                    # if save_sim_activations:
+                    #     os.makedirs(os.path.dirname(output_filename), exist_ok=True)
+                    #     with open(output_filename, "wb") as f:
+                    #         pickle.dump(simulated_activation, f)
                 else:
                     raise ValueError(f"Invalid ablation method: {ablation_method}")
             
@@ -1397,13 +1330,8 @@ if __name__ == "__main__":
     # Here you select which functions are going to be used as input to training the decision trees
     # We will iterate over every one
     default_config.custom_functions = [
-        # othello_utils.games_batch_to_input_tokens_flipped_bs_valid_moves_bs_probe_classifier_input_BLC,
-        # othello_utils.games_batch_to_input_tokens_flipped_bs_valid_moves_classifier_input_BLC,
-        othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC,
-        # othello_utils.games_batch_to_previous_board_state_classifier_input_BLC,
-        # othello_utils.games_batch_to_board_state_classifier_input_BLC,
-        # othello_utils.games_batch_to_input_tokens_flipped_classifier_input_BLC,
-        # othello_utils.games_batch_to_probe_classifier_input_BLC,
+        # othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC,
+        othello_utils.games_batch_to_input_tokens_flipped_pbs_classifier_input_BLC,
     ]
 
     # Here you select what types of interventions will be performed

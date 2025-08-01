@@ -421,9 +421,16 @@ def games_batch_to_board_state_and_input_tokens_classifier_input_BLC(
     batch_str_moves: list[list[int]],
 ) -> t.Tensor:
     input_tokens_BLC = games_batch_to_input_tokens_classifier_input_BLC(batch_str_moves)
-    # board_state_BLC = games_batch_to_board_state_classifier_input_BLC(batch_str_moves)
-    board_state_BLC = games_batch_to_previous_board_state_classifier_input_BLC(batch_str_moves)
+    board_state_BLC = games_batch_to_board_state_classifier_input_BLC(batch_str_moves)
     return t.cat([board_state_BLC, input_tokens_BLC], dim=-1)
+
+
+def games_batch_to_previous_board_state_and_input_tokens_classifier_input_BLC(
+    batch_str_moves: list[list[int]],
+) -> t.Tensor:
+    input_tokens_BLC = games_batch_to_input_tokens_classifier_input_BLC(batch_str_moves)
+    previous_board_state_BLC = games_batch_to_previous_board_state_classifier_input_BLC(batch_str_moves)
+    return t.cat([previous_board_state_BLC, input_tokens_BLC], dim=-1)
 
 
 def games_batch_to_input_tokens_flipped_bs_classifier_input_BLC(
@@ -434,6 +441,16 @@ def games_batch_to_input_tokens_flipped_bs_classifier_input_BLC(
     )
     flipped_BLC = games_batch_to_flipped_classifier_input_BLC(batch_str_moves)
     return t.cat([input_tokens_bs_BLC, flipped_BLC], dim=-1)
+
+
+def games_batch_to_input_tokens_flipped_pbs_classifier_input_BLC(
+    batch_str_moves: list[list[int]],
+) -> t.Tensor:
+    input_tokens_pbs_BLC = games_batch_to_previous_board_state_and_input_tokens_classifier_input_BLC(
+        batch_str_moves
+    )
+    flipped_BLC = games_batch_to_flipped_classifier_input_BLC(batch_str_moves)
+    return t.cat([input_tokens_pbs_BLC, flipped_BLC], dim=-1)
 
 
 def games_batch_to_input_tokens_flipped_bs_valid_moves_classifier_input_BLC(

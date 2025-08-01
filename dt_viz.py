@@ -13,22 +13,22 @@ import numpy as np
 from typing import Optional, List
 
 # %%
-with open("/home/zihangw/Algoverse/OthelloReverseEngineering/neuron_simulation/decision_trees_6000/results_mlp_neuron_trainer_0_inputs_6000.pkl", "rb") as f:
-    training_result = pickle.load(f)
+# with open("/home/zihangw/Algoverse/OthelloReverseEngineering/neuron_simulation/decision_trees/results_mlp_neuron_trainer_0_inputs_6000.pkl", "rb") as f:
+#     training_result = pickle.load(f)
 
-r2_threshold = 0.7
-r2_scores = [
-    values['games_batch_to_input_tokens_flipped_bs_classifier_input_BLC']['decision_tree']['r2']
-    for _, values in training_result["results"].items()
-]
-num_features = [(r2_score>r2_threshold).sum() for r2_score in r2_scores]
+# r2_threshold = 0.7
+# r2_scores = [
+#     values['games_batch_to_input_tokens_flipped_bs_classifier_input_BLC']['decision_tree']['r2']
+#     for _, values in training_result["results"].items()
+# ]
+# num_features = [(r2_score>r2_threshold).sum() for r2_score in r2_scores]
 
-print(num_features)
+# print(num_features)
 
 # %%
 LAYER = 5
 # NEURON_IDX = 1407
-DATA_PATH = 'neuron_simulation/decision_trees_6000/decision_trees_mlp_neuron_6000.pkl'
+DATA_PATH = 'neuron_simulation/decision_trees/decision_trees_mlp_neuron_6000.pkl'
 MAX_DEPTH = None  # Set to an integer to limit tree depth in visualization
 SAVE_PATH = None  # Set to a file path to save the visualization
 

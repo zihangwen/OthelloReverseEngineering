@@ -26,7 +26,8 @@ print(f"Using device: {device}")
 model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
 dataset_size = 50
 custom_functions = [
-    othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC,
+    # othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC,
+    othello_utils.games_batch_to_input_tokens_flipped_pbs_classifier_input_BLC,
 ]
 model = utils.get_model(model_name, device)
 train_data = construct_othello_dataset(
