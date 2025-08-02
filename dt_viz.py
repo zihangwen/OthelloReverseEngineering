@@ -28,7 +28,7 @@ from typing import Optional, List
 # %%
 LAYER = 5
 # NEURON_IDX = 1407
-DATA_PATH = 'neuron_simulation/decision_trees/decision_trees_mlp_neuron_6000.pkl'
+DATA_PATH = 'neuron_simulation/decision_trees_bs/decision_trees_mlp_neuron_6000.pkl'
 MAX_DEPTH = None  # Set to an integer to limit tree depth in visualization
 SAVE_PATH = None  # Set to a file path to save the visualization
 
@@ -64,11 +64,12 @@ def get_neuron_decision_tree(data: dict, layer: int, neuron_idx: int, function_n
     
     return neuron_tree, neuron_r2
 
-def create_placeholder_feature_names(n_features: int) -> List[str]:
+
+def create_pbs_feature_names(n_features: int) -> List[str]:
     """Create feature names based on the actual feature structure:
     (192) + (64 + 64 + 5) + (64) = 389 dimensional vector
-    - Last move: 64 one-hot move + 64 pre-occupied + 5 coordinates  
     - Board state: 192 one-hot (8x8x3 mine/empty/theirs)
+    - Last move: 64 one-hot move + 64 pre-occupied + 5 coordinates  
     - Flipped moves: 64 binary encoding of flipped squares
     
     Square notation: A0-H7 where A0 is top-left, H7 is bottom-right
@@ -93,7 +94,6 @@ def create_placeholder_feature_names(n_features: int) -> List[str]:
             feature_names.append(f"{square}_mine")
             idx += 1
 
-    
     # Next 64: Last move one-hot encoding (A0-H7)
     for i in range(min(64, n_features - idx)):
         row = i // 8
@@ -130,6 +130,82 @@ def create_placeholder_feature_names(n_features: int) -> List[str]:
         idx += 1
     
     return feature_names
+
+
+def create_bs_feature_names(n_features: int) -> List[str]:
+    """Create feature names based on the actual feature structure:
+    (192) + (64 + 64 + 5) + (64) = 389 dimensional vector
+    - Board state: 192 one-hot (8x8x3 mine/empty/theirs)
+    - Last move: 64 one-hot move + 64 pre-occupied + 5 coordinates  
+    - Flipped moves: 64 binary encoding of flipped squares
+    
+    Square notation: A0-H7 where A0 is top-left, H7 is bottom-right
+    """
+    feature_names = []
+    idx = 0
+    
+    # First 192: Board state (8x8x3 = mine/empty/theirs)
+    for square_idx in range(min(64, (n_features - idx) // 3)):
+        row = square_idx // 8  
+        col = square_idx % 8
+        square = chr(ord('A') + col) + str(row)
+        
+        # Add the 3 states for this square
+        if idx < n_features:
+            feature_names.append(f"next_board_{square}_theirs")
+            idx += 1
+        if idx < n_features:
+            feature_names.append(f"next_board_{square}_empty") 
+            idx += 1
+        if idx < n_features:
+            feature_names.append(f"next_board_{square}_mine")
+            idx += 1
+
+    # Next 64: Last move one-hot encoding (A0-H7)
+    for i in range(min(64, n_features - idx)):
+        row = i // 8
+        col = i % 8
+        square = chr(ord('A') + col) + str(row)  # A0, B0, ..., H7
+        feature_names.append(f"{square}_just_played")
+        idx += 1
+    
+    # Next 64: Pre-occupied squares (A0-H7)  
+    for i in range(min(64, n_features - idx)):
+        row = i // 8
+        col = i % 8
+        square = chr(ord('A') + col) + str(row)
+        feature_names.append(f"{square}_pre_occupied")
+        idx += 1
+    
+    # Next 5: Move coordinates and player info
+    coord_names = ["move_row", "move_col", "move_number", "white_played", "black_played"]
+    for i in range(min(5, n_features - idx)):
+        feature_names.append(coord_names[i])
+        idx += 1
+    
+    # Last 64: Flipped squares (A0-H7)
+    for i in range(min(64, n_features - idx)):
+        row = i // 8
+        col = i % 8
+        square = chr(ord('A') + col) + str(row)
+        feature_names.append(f"{square}_flipped")
+        idx += 1
+    
+    # Add any remaining features as generic (shouldn't happen with 389 total)
+    while idx < n_features:
+        feature_names.append(f"Feature_{idx}")
+        idx += 1
+    
+    return feature_names
+
+
+def create_feature_names(n_features: int, function_name) -> List[str]:
+    if function_name == "games_batch_to_input_tokens_flipped_pbs_classifier_input_BLC":
+        return create_pbs_feature_names(n_features)
+    elif function_name == "games_batch_to_input_tokens_flipped_bs_classifier_input_BLC":
+        return create_bs_feature_names(n_features)
+    else:
+        raise ValueError(f"Unknown function name: {function_name}. Cannot create feature names.")
 
 # %%
 # Get layer statistics
@@ -216,7 +292,7 @@ for test_neuron in [0, 1, 2]:
 
 # Create feature names specifically for this tree's features
 n_features = tree_model.n_features_in_
-feature_names = create_placeholder_feature_names(n_features)
+feature_names = create_feature_names(n_features, function_name)
 print(f"Number of input features for this neuron's tree: {n_features}")
 
 # Debug: Show tree-specific info
