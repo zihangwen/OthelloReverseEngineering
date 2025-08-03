@@ -84,7 +84,7 @@ def evaluate_decision_trees(
     # Load model directly and only create test data
     model = utils.get_model(model_name, device)
     test_data = construct_dataset_per_layer(
-        custom_functions, test_size, "test", device, list(range(8))
+        custom_functions, test_size, "test", device, list(range(model.cfg.n_layers))
     )
     
     # Load SAEs
@@ -99,7 +99,7 @@ def evaluate_decision_trees(
         ae_list[i] = ae_list[i].to(device)
     
     submodule_dict = get_submodule_dict(
-        model, model_name, list(range(8)), input_location
+        model, model_name, list(range(model.cfg.n_layers)), input_location
     )
     
     # Cache SAE activations on test data to evaluate decision tree performance
@@ -109,7 +109,7 @@ def evaluate_decision_trees(
     neuron_acts = cache_sae_activations(
         model,
         test_data,
-        list(range(8)),
+        list(range(model.cfg.n_layers)),
         int(test_size / n_batch),  # batch_size
         n_batch,
         input_location,
@@ -190,7 +190,7 @@ def evaluate_dt(
     
     results = {"hyperparameters": hyperparameters.copy(), "results": {}}
     
-    for layer in range(8):
+    for layer in range(model.cfg.n_layers):
         results["results"][layer] = {}
         for custom_function in custom_functions:
             func_name = custom_function.__name__
