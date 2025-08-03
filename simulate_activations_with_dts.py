@@ -982,10 +982,11 @@ def perform_interventions(
     ae_dict: dict,
     submodule_dict: dict,
     hyperparameters: dict,
-    dataset_size: int,
-    force_recompute: bool,
-    output_location: str,
-    save_sim_activations: bool = False,
+    # dataset_size: int,
+    # force_recompute: bool,
+    # output_location: str,
+    # save_sim_activations: bool = False,
+    verbose: bool = True,
 ):
     ablations = {"results": {}}
 
@@ -1022,9 +1023,9 @@ def perform_interventions(
                     good_f1s = all_f1s > threshold
                     selected_features[layer] = good_f1s
 
-                    output_filename = (
-                        f"{output_location}decision_trees/dt_activations_{input_location}_{dataset_size}/layer_{layer}.pkl"
-                    )
+                    # output_filename = (
+                    #     f"{output_location}decision_trees/dt_activations_{input_location}_{dataset_size}/layer_{layer}.pkl"
+                    # )
                     # if not force_recompute and os.path.exists(output_filename):
                     #     print(f"decision tree activations for layer {layer} already exists and loading.")
                     #     with open(output_filename, "rb") as f:
@@ -1069,21 +1070,22 @@ def perform_interventions(
                 logits_patch_BLV, data["valid_moves"]
             )
 
-            print(
-                f"\nablation_method: {ablation_method}, ablate_not_selected: {ablate_not_selected}, add_error: {add_error}"
-            )
-            print(
-                f"selected_layers: {selected_layers}, input_location: {input_location}, custom_function: {custom_function.__name__}"
-            )
-            print(f"{kl_div_BL.mean()} Mean KL div (lower is better)")
-            print(f"{clean_accuracy} Original model legal move accuracy (should be ~0.9998)")
-            print(f"{patch_accuracy} Patch intervention (higher is better)")
-
-            for layer in selected_features:
-                good_f1s = selected_features[layer]
+            if verbose:
                 print(
-                    f"Out of {good_f1s.shape[0]} neurons, {good_f1s.sum()} can be fit well by a decision tree"
+                    f"\nablation_method: {ablation_method}, ablate_not_selected: {ablate_not_selected}, add_error: {add_error}"
                 )
+                print(
+                    f"selected_layers: {selected_layers}, input_location: {input_location}, custom_function: {custom_function.__name__}"
+                )
+                print(f"{kl_div_BL.mean()} Mean KL div (lower is better)")
+                print(f"{clean_accuracy} Original model legal move accuracy (should be ~0.9998)")
+                print(f"{patch_accuracy} Patch intervention (higher is better)")
+
+                for layer in selected_features:
+                    good_f1s = selected_features[layer]
+                    print(
+                        f"Out of {good_f1s.shape[0]} neurons, {good_f1s.sum()} can be fit well by a decision tree"
+                    )
 
             assert clean_total == patch_total
 
@@ -1309,9 +1311,9 @@ def run_simulations(config: sim_config.SimulationConfig):
                     ae_dict=ae_list,
                     submodule_dict=submodule_dict,
                     hyperparameters=individual_hyperparameters.copy(),
-                    dataset_size=dataset_size,
-                    force_recompute=config.force_recompute,
-                    output_location=config.output_location,
+                    # dataset_size=dataset_size,
+                    # force_recompute=config.force_recompute,
+                    # output_location=config.output_location,
                 )
 
                 ablation_filename = f"{config.output_location}decision_trees/ablation_results_{input_location}_{ablation_method}_ablate_not_selected_{ablate_not_selected}_add_error_{add_error}_trainer_{trainer_id}_inputs_{dataset_size}.pkl"
@@ -1330,8 +1332,8 @@ if __name__ == "__main__":
     # Here you select which functions are going to be used as input to training the decision trees
     # We will iterate over every one
     default_config.custom_functions = [
-        # othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC,
-        othello_utils.games_batch_to_input_tokens_flipped_pbs_classifier_input_BLC,
+        othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC,
+        # othello_utils.games_batch_to_input_tokens_flipped_pbs_classifier_input_BLC,
     ]
 
     # Here you select what types of interventions will be performed
