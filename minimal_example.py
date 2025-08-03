@@ -15,7 +15,7 @@ from transformer_lens.utils import to_numpy
 from torch import Tensor
 from IPython.display import HTML, display
 from jaxtyping import Bool, Float, Int
-import neuron_simulation.neel_utils as neel_utils
+import neuron_simulation.arena_utils as arena_utils
 
 device = "cuda" if t.cuda.is_available() else "cpu"
 t.set_grad_enabled(False)
@@ -24,112 +24,105 @@ print(f"Using device: {device}")
 
 # %%
 model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
-dataset_size = 50
+test_size = 500
 custom_functions = [
-    # othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC,
-    othello_utils.games_batch_to_input_tokens_flipped_pbs_classifier_input_BLC,
+    othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC,
+    # othello_utils.games_batch_to_input_tokens_flipped_pbs_classifier_input_BLC,
 ]
 model = utils.get_model(model_name, device)
-train_data = construct_othello_dataset(
-    custom_functions=custom_functions,
-    n_inputs=dataset_size,
-    split="train",
-    device=device,
-)
+# train_data = construct_othello_dataset(
+#     custom_functions=custom_functions,
+#     n_inputs=dataset_size,
+#     split="train",
+#     device=device,
+# )
 test_data = construct_othello_dataset(
     custom_functions=custom_functions,
-    n_inputs=dataset_size//2,
+    n_inputs=test_size,
     split="test", 
     device=device,
 )
 
-# %%
-for key in train_data.keys():
-    if isinstance(train_data[key][0], t.Tensor):
-        print(f"{key} : {train_data[key][0].shape}")
-    print(f"{key} : {train_data[key][0]}")
+# %% PLOTTING LOG PROBS
+# First 10 moves of game 0
+# sample_input = t.tensor(test_data["encoded_inputs"][0][:10]).to(device)
+# with model.trace(sample_input):
+#     logits = model.unembed.output.save()
+# logprobs = logits.log_softmax(dim=-1)
+
+# MIDDLE_SQUARES = [27, 28, 35, 36]
+# ALL_SQUARES = [i for i in range(64) if i not in MIDDLE_SQUARES]
+
+# logprobs_board = t.full(size=(8, 8), fill_value=-13.0, device=device)
+# logprobs_board.flatten()[ALL_SQUARES] = logprobs[
+#     0, 0, 1:
+# ]  # the [1:] is to filter out logits for the "pass" move
+
+# arena_utils.plot_board_values(logprobs_board, title="Example Log Probs", width=500)
+
+# %% PLOTTING LOG PROBS with ANNOTATED TOKEN IDS and BOARD LABELS
+# TOKEN_IDS_2D = np.array(
+#     [str(i) if i in ALL_SQUARES else "" for i in range(64)]
+# ).reshape(8, 8)
+# BOARD_LABELS_2D = np.array(
+#     ["ABCDEFGH"[i // 8] + f"{i % 8}" for i in range(64)]
+# ).reshape(8, 8)
+
+# print(TOKEN_IDS_2D)
+# print(BOARD_LABELS_2D)
+
+# arena_utils.plot_board_values(
+#     t.stack([logprobs_board, logprobs_board]),  # shape (2, 8, 8)
+#     title="Example Log Probs (with annotated token IDs)",
+#     width=800,
+#     text=np.stack([TOKEN_IDS_2D, BOARD_LABELS_2D]),  # shape (2, 8, 8)
+#     board_titles=["Labelled by token ID", "Labelled by board label"],
+# )
+
+# %% PLOTTING LOG PROBS (10 MOVES)
+# logprobs_multi_board = t.full(size=(10, 8, 8), fill_value=-13.0, device=device)
+# logprobs_multi_board.flatten(1, -1)[:, ALL_SQUARES] = logprobs[
+#     0, :, 1:
+# ]  # we now do all 10 moves at once
+
+# arena_utils.plot_board_values(
+#     logprobs_multi_board,
+#     title="Example Log Probs",
+#     width=1000,
+#     boards_per_row=5,
+#     board_titles=[f"Logprobs after move {i}" for i in range(1, 11)],
+# )
+
+# %% PLOTTING BOARD STATES AND LEGAL MOVES (10 MOVES)
+# board_states = t.zeros((10, 8, 8), dtype=t.int32)
+# legal_moves = t.zeros((10, 8, 8), dtype=t.int32)
+
+# board = arena_utils.OthelloBoardState()
+# for i, token_id in enumerate(sample_input.squeeze()):
+#     # board.umpire takes a square index (i.e. from 0 to 63) and makes a move on the board
+#     board.umpire(arena_utils.id_to_square(token_id))
+
+#     # board.state gives us the 8x8 numpy array of 0 (blank), -1 (black), 1 (white)
+#     board_states[i] = t.from_numpy(board.state)
+
+#     # board.get_valid_moves() gives us a list of the indices of squares that are legal to play next
+#     legal_moves[i].flatten()[board.get_valid_moves()] = 1
+
+# # Turn `legal_moves` into strings, with "o" where the move is legal and empty string where illegal
+# legal_moves_annotation = np.where(to_numpy(legal_moves), "o", "").tolist()
+
+# arena_utils.plot_board_values(
+#     board_states,
+#     title="Board states",
+#     width=1000,
+#     boards_per_row=5,
+#     board_titles=[f"State after move {i}" for i in range(1, 11)],
+#     text=legal_moves_annotation,
+# )
 
 # %%
-# First 10 moves of game 1
-sample_input = t.tensor(train_data["encoded_inputs"][0][:10]).to(device)
-with model.trace(sample_input):
-    logits = model.unembed.output.save()
-logprobs = logits.log_softmax(dim=-1)
-
-# %%
-MIDDLE_SQUARES = [27, 28, 35, 36]
-ALL_SQUARES = [i for i in range(64) if i not in MIDDLE_SQUARES]
-
-logprobs_board = t.full(size=(8, 8), fill_value=-13.0, device=device)
-logprobs_board.flatten()[ALL_SQUARES] = logprobs[
-    0, 0, 1:
-]  # the [1:] is to filter out logits for the "pass" move
-
-neel_utils.plot_board_values(logprobs_board, title="Example Log Probs", width=500)
-
-# %%
-TOKEN_IDS_2D = np.array(
-    [str(i) if i in ALL_SQUARES else "" for i in range(64)]
-).reshape(8, 8)
-BOARD_LABELS_2D = np.array(
-    ["ABCDEFGH"[i // 8] + f"{i % 8}" for i in range(64)]
-).reshape(8, 8)
-
-print(TOKEN_IDS_2D)
-print(BOARD_LABELS_2D)
-
-neel_utils.plot_board_values(
-    t.stack([logprobs_board, logprobs_board]),  # shape (2, 8, 8)
-    title="Example Log Probs (with annotated token IDs)",
-    width=800,
-    text=np.stack([TOKEN_IDS_2D, BOARD_LABELS_2D]),  # shape (2, 8, 8)
-    board_titles=["Labelled by token ID", "Labelled by board label"],
-)
-
-# %%
-logprobs_multi_board = t.full(size=(10, 8, 8), fill_value=-13.0, device=device)
-logprobs_multi_board.flatten(1, -1)[:, ALL_SQUARES] = logprobs[
-    0, :, 1:
-]  # we now do all 10 moves at once
-
-neel_utils.plot_board_values(
-    logprobs_multi_board,
-    title="Example Log Probs",
-    width=1000,
-    boards_per_row=5,
-    board_titles=[f"Logprobs after move {i}" for i in range(1, 11)],
-)
-
-# %%
-board_states = t.zeros((10, 8, 8), dtype=t.int32)
-legal_moves = t.zeros((10, 8, 8), dtype=t.int32)
-
-board = neel_utils.OthelloBoardState()
-for i, token_id in enumerate(sample_input.squeeze()):
-    # board.umpire takes a square index (i.e. from 0 to 63) and makes a move on the board
-    board.umpire(neel_utils.id_to_square(token_id))
-
-    # board.state gives us the 8x8 numpy array of 0 (blank), -1 (black), 1 (white)
-    board_states[i] = t.from_numpy(board.state)
-
-    # board.get_valid_moves() gives us a list of the indices of squares that are legal to play next
-    legal_moves[i].flatten()[board.get_valid_moves()] = 1
-
-# Turn `legal_moves` into strings, with "o" where the move is legal and empty string where illegal
-legal_moves_annotation = np.where(to_numpy(legal_moves), "o", "").tolist()
-
-neel_utils.plot_board_values(
-    board_states,
-    title="Board states",
-    width=1000,
-    boards_per_row=5,
-    board_titles=[f"State after move {i}" for i in range(1, 11)],
-    text=legal_moves_annotation,
-)
-
-# %%
-board_seqs_id = t.tensor(train_data["encoded_inputs"]).long()
-board_seqs_square = t.tensor(train_data["decoded_inputs"]).long()
+board_seqs_id = t.tensor(test_data["encoded_inputs"]).long()
+board_seqs_square = t.tensor(test_data["decoded_inputs"]).long()
 
 # %%
 def get_board_states_and_legal_moves(
@@ -152,7 +145,7 @@ def get_board_states_and_legal_moves(
 
     # Loop over each game, populating state & legal moves tensors after each move
     for n in range(n_games):
-        board = neel_utils.OthelloBoardState()
+        board = arena_utils.OthelloBoardState()
         for i in range(n_moves):
             board.umpire(games_square[n, i].item())
             states[n, i] = t.from_numpy(board.state)
@@ -166,8 +159,8 @@ def get_board_states_and_legal_moves(
 
 num_games = 50
 
-focus_games_id = board_seqs_id[:num_games]  # shape [50, 60]
-focus_games_square = board_seqs_square[:num_games]  # shape [50, 60]
+focus_games_id = board_seqs_id[:num_games]  # shape [50, 59]
+focus_games_square = board_seqs_square[:num_games]  # shape [50, 59]
 focus_states, focus_legal_moves, focus_legal_moves_annotation = (
     get_board_states_and_legal_moves(focus_games_square)
 )
@@ -176,7 +169,7 @@ print("focus states:", focus_states.shape)
 print("focus_legal_moves", tuple(focus_legal_moves.shape))
 
 # Plot the first 10 moves of the first game
-neel_utils.plot_board_values(
+arena_utils.plot_board_values(
     focus_states[0, :10],
     title="Board states",
     width=1000,
@@ -188,7 +181,7 @@ neel_utils.plot_board_values(
 )
 
 # %%
-focus_logits, focus_cache = model.run_with_cache(focus_games_id[:, :-1].to(device))
+focus_logits, focus_cache = model.run_with_cache(focus_games_id.to(device))
 
 # %%
 probe_dict = {i : t.load(
@@ -213,7 +206,7 @@ def plot_probe_outputs(
         "d_model, d_model row col options -> options row col",
     )
 
-    neel_utils.plot_board_values(
+    arena_utils.plot_board_values(
         probe_out.softmax(dim=0),
         title=title,
         width=900,
@@ -226,7 +219,7 @@ def plot_probe_outputs(
 game_index = 0
 move = 29
 
-neel_utils.plot_board_values(
+arena_utils.plot_board_values(
     focus_states[game_index, move],
     title="Focus game states",
     width=400,
@@ -323,7 +316,7 @@ neuron = 4
 w_in_L5N1393_blank = calculate_neuron_input_weights(model, blank_probe_normalised, layer, neuron)
 w_in_L5N1393_my = calculate_neuron_input_weights(model, my_probe_normalised, layer, neuron)
 
-neel_utils.plot_board_values(
+arena_utils.plot_board_values(
     t.stack([w_in_L5N1393_blank, w_in_L5N1393_my]),
     title=f"Input weights in terms of the probe for neuron L{layer}N{neuron}",
     board_titles=["Blank In", "My In"],
@@ -342,7 +335,7 @@ cos_sim_rearranged = t.zeros((8, 8), device=device)
 cos_sim_rearranged.flatten()[ALL_SQUARES] = cos_sim
 
 # Plot results
-neel_utils.plot_board_values(
+arena_utils.plot_board_values(
     cos_sim_rearranged,
     title=f"Cosine sim of neuron L{layer}N{neuron} with W<sub>U</sub> directions",
     width=450,

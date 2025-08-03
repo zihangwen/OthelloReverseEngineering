@@ -479,42 +479,9 @@ def extract_ablation_results(
 # # Run the console-style output
 # print_console_style_results()
 
+
 # %%
-# Create overlay plots comparing different dataset sizes (60, 600, 6000)
-directory = "neuron_simulation/decision_trees_bs_eval"
-# Updated custom function names to match what you trained with
-custom_function_names = [
-    othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC.__name__,
-]
-
-# default_config = sim_config.selected_config
-# 60, 600, or 6000
-# dataset_size = 600
-test_size = 500
-
-ablation_method = "dt"
-ablate_not_selected = True
-add_error = False
-
-desired_layer_tuples = []
-# Generate single layer tuples to match your training
-for i in range(8):
-    desired_layer_tuples.append((i,))
-
-group_by = "input_location"
-
-if group_by == "input_location":
-    func_name_filter = custom_function_names[0]
-    input_location_filter = None
-elif group_by == "custom_function":
-    func_name_filter = None
-    input_location_filter = "mlp_neuron"  # This matches your training
-else:
-    raise ValueError(f"Invalid group_by value: {group_by}")
-
-# Load all data sources
-
-def plot_dataset_size_comparison(metric: str, test_size: int):
+def plot_dataset_size_comparison(metric: str, test_size: int, group_by: str = "decision_tree_file"):
     """Plot overlays comparing the same metric across different dataset sizes"""
     
     plt.figure(figsize=(12, 8))
@@ -531,9 +498,9 @@ def plot_dataset_size_comparison(metric: str, test_size: int):
             results_data,
             custom_function_names,
             metric,
-            "decision_tree_file",
+            group_by,
             input_location_filter=None,
-            func_name_filter=custom_function_names[0],
+            func_name_filter=None,
             desired_layer_tuples=list(range(8)),
         )
     else:
@@ -549,9 +516,9 @@ def plot_dataset_size_comparison(metric: str, test_size: int):
             ablation_data,
             custom_function_names,
             metric,
-            "decision_tree_file",
+            group_by,
             input_location_filter=None,
-            func_name_filter=custom_function_names[0],
+            func_name_filter=None,
             desired_layer_tuples=desired_layer_tuples,
         )
 
@@ -611,17 +578,113 @@ def plot_dataset_size_comparison(metric: str, test_size: int):
     plt.savefig(f"neuron_simulation/images/{metric}_dataset_size_comparison.png", dpi=300, bbox_inches='tight')
     plt.show()
 
+
+def plot_dataset_size_comparison_r2_neurons(
+    layer: int,
+    test_size: int,
+    tree_file_select: list[str],
+):
+    """Plot overlays comparing the same metric across different dataset sizes"""
+    assert len(tree_file_select) == 2
+
+    plt.figure(figsize=(12, 8))
+    
+    colors = ['blue', 'red', 'green', 'orange', 'purple']
+    markers = ['o', 's', '^', 'D', 'v']
+    
+    print("Loading data files...")
+    results_data = load_results_pickle_files(directory, test_size)
+    print(f"Loaded {len(results_data)} results files")
+
+    dt_file_list = []
+    r2_scores_list = []
+    for data in results_data:
+        hyperparams = data["hyperparameters"]
+        dt_file_list.append(os.path.basename(hyperparams["decision_tree_file"]))
+
+        r2_scores = np.array(data["results"][layer][custom_function_names[0]]['decision_tree']['r2'])
+        r2_scores_list.append(r2_scores)
+    
+    assert all([file in dt_file_list for file in tree_file_select])
+    indices = [dt_file_list.index(file) for file in tree_file_select]
+    r2_diff = r2_scores_list[indices[0]] - r2_scores_list[indices[1]]
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(r2_diff)
+    plt.axhline(0, color='gray', linestyle='--', linewidth=1)
+
+    plt.xlabel('Neuron')
+    plt.ylabel(f'R² differences')
+    
+    plt.title(f'Per MLP neuron differences for Layer {layer}\nbetween {dt_file_list[indices[0]]} and {dt_file_list[indices[1]]}')
+    plt.grid(True, alpha=0.3)
+    plt.savefig(
+        (
+            f"neuron_simulation/images/r2_diff_"
+            f"{dt_file_list[indices[0]].split("_")[-1].split(".")[0]}_"
+            f"{dt_file_list[indices[1]].split("_")[-1].split(".")[0]}.png"
+        ),
+        dpi=300, bbox_inches='tight'
+    )
+    plt.show()
+
+    return r2_diff
+
+# %%
+# Create overlay plots comparing different dataset sizes (60, 600, 6000)
+directory = "neuron_simulation/decision_trees_bs_eval"
+# Updated custom function names to match what you trained with
+custom_function_names = [
+    othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC.__name__,
+]
+
+# default_config = sim_config.selected_config
+# 60, 600, or 6000
+# dataset_size = 600
+test_size = 500
+
+ablation_method = "dt"
+ablate_not_selected = True
+add_error = False
+
+desired_layer_tuples = []
+# Generate single layer tuples to match your training
+for i in range(8):
+    desired_layer_tuples.append((i,))
+
+group_by = "decision_tree_file"
+
 # Create overlay plots for all three metrics
 # dataset_sizes = [60, 600, 6000]  # Add/remove dataset sizes as needed
 test_size = 500  # Fixed test size for comparison
 metrics_to_compare = ["patch_accuracy", "kl", "r2"]
 
-print("Creating dataset size comparison plots...")
-for metric in metrics_to_compare:
-    print(f"\n=== Creating {metric.upper()} comparison plot ===")
-    plot_dataset_size_comparison(metric, test_size)
+# print("Creating dataset size comparison plots...")
+# for metric in metrics_to_compare:
+#     print(f"\n=== Creating {metric.upper()} comparison plot ===")
+#     plot_dataset_size_comparison(metric, test_size, group_by)
 
-print("\nAll comparison plots created successfully!")
+# print("\nAll comparison plots created successfully!")
+
+r2_diff = plot_dataset_size_comparison_r2_neurons(
+    layer=5,
+    test_size=test_size,
+    tree_file_select=[
+        "decision_trees_mlp_neuron_6000.pkl",
+        "decision_trees_mlp_neuron_600.pkl",
+    ],
+)
+
+r2_diff_negative = r2_diff < 0
+r2_diff_negative_indices = np.where(r2_diff_negative)[0]
+r2_diff_negative_scores = r2_diff[r2_diff_negative_indices]
+
+sorted_pairs = sorted(zip(r2_diff_negative_scores, r2_diff_negative_indices))  # Sort by b
+r2_diff_negative_scores, r2_diff_negative_indices = zip(*sorted_pairs)  # Unzip back to separate lists
+
+print("number of negative R² differences:", len(r2_diff_negative_scores))
+print("negative neuron indexs:", *r2_diff_negative_indices)
+print("negative neuron scores:", *r2_diff_negative_scores)
 
 # %%
 
