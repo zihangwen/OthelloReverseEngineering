@@ -30,10 +30,12 @@ LAYER = 5
 # NEURON_IDX = 1407
 DATA_PATH = 'neuron_simulation/decision_trees_bs/decision_trees_mlp_neuron_6000.pkl'
 MAX_DEPTH = None  # Set to an integer to limit tree depth in visualization
-SAVE_PATH = None  # Set to a file path to save the visualization
+SAVE_PATH = "neuron_simulation/images/dt_6000"  # Set to a file path to save the visualization
+
+os.makedirs(SAVE_PATH, exist_ok=True)
 
 with open(DATA_PATH, "rb") as f:
-    data  = pickle.load(f)
+    data = pickle.load(f)
 
 print(f"Loaded decision tree data from {DATA_PATH}")
 print(f"Available layers: {list(data.keys())}")
@@ -244,7 +246,7 @@ if stats:
 
 #%%
 # Create histogram of R² scores
-def plot_r2_histogram(data: dict, layer: int, function_name: str, neuron_index: Optional[int] = None, save_path: Optional[str] = None):
+def plot_r2_histogram(data: dict, layer: int, function_name: str, neuron_idx: Optional[int] = None, save_path: Optional[str] = None):
     """Plot histogram of R² scores for all neurons in a layer."""
     if layer not in data or function_name not in data[layer]:
         print(f"No data found for layer {layer}, function {function_name}")
@@ -260,14 +262,14 @@ def plot_r2_histogram(data: dict, layer: int, function_name: str, neuron_index: 
     plt.grid(True, alpha=0.3)
     
     # Add vertical line for current neuron's R²
-    current_r2 = r2_scores[neuron_index] if neuron_index < len(r2_scores) else None
+    current_r2 = r2_scores[neuron_idx] if neuron_idx < len(r2_scores) else None
     if current_r2 is not None:
         plt.axvline(current_r2, color='red', linestyle='--', linewidth=2, 
-                   label=f'Neuron {neuron_index}: R² = {current_r2:.3f}')
+                   label=f'Neuron {neuron_idx}: R² = {current_r2:.3f}')
         plt.legend()
     
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.savefig(f"{save_path}/r2_hist_layer_{layer}_with_neuron_{neuron_idx}.png", dpi=300, bbox_inches='tight')
         print(f"Saved R² histogram to {save_path}")
     
     plt.show()
@@ -275,7 +277,7 @@ def plot_r2_histogram(data: dict, layer: int, function_name: str, neuron_index: 
 # %%
 NEURON_IDX = 1407
 # Plot the histogram
-plot_r2_histogram(data, LAYER, function_name, neuron_index = NEURON_IDX)
+plot_r2_histogram(data, LAYER, function_name, neuron_idx = NEURON_IDX, save_path=SAVE_PATH)
 
 # %%
 # Extract the specific neuron's decision tree
@@ -344,7 +346,7 @@ def visualize_decision_tree(tree_model, neuron_idx: int, layer: int, r2_score: f
               fontsize=16, pad=20)
     
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.savefig(f"{save_path}/dt_layer_{layer}_neuron_{neuron_idx}.png", dpi=300, bbox_inches='tight')
         print(f"Saved visualization to {save_path}")
     
     plt.show()
