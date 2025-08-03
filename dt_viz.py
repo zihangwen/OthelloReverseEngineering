@@ -85,13 +85,13 @@ def create_pbs_feature_names(n_features: int) -> List[str]:
         
         # Add the 3 states for this square
         if idx < n_features:
-            feature_names.append(f"{square}_theirs")
+            feature_names.append(f"prev_board_{square}_theirs")
             idx += 1
         if idx < n_features:
-            feature_names.append(f"{square}_empty") 
+            feature_names.append(f"prev_board_{square}_empty") 
             idx += 1
         if idx < n_features:
-            feature_names.append(f"{square}_mine")
+            feature_names.append(f"prev_board_{square}_mine")
             idx += 1
 
     # Next 64: Last move one-hot encoding (A0-H7)
@@ -152,13 +152,13 @@ def create_bs_feature_names(n_features: int) -> List[str]:
         
         # Add the 3 states for this square
         if idx < n_features:
-            feature_names.append(f"next_board_{square}_theirs")
+            feature_names.append(f"{square}_mine")
             idx += 1
         if idx < n_features:
-            feature_names.append(f"next_board_{square}_empty") 
+            feature_names.append(f"{square}_empty") 
             idx += 1
         if idx < n_features:
-            feature_names.append(f"next_board_{square}_mine")
+            feature_names.append(f"{square}_theirs")
             idx += 1
 
     # Next 64: Last move one-hot encoding (A0-H7)
@@ -206,6 +206,7 @@ def create_feature_names(n_features: int, function_name) -> List[str]:
         return create_bs_feature_names(n_features)
     else:
         raise ValueError(f"Unknown function name: {function_name}. Cannot create feature names.")
+
 
 # %%
 # Get layer statistics
