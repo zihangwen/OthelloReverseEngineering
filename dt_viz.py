@@ -83,7 +83,7 @@ def create_pbs_feature_names(n_features: int) -> List[str]:
     for square_idx in range(min(64, (n_features - idx) // 3)):
         row = square_idx // 8  
         col = square_idx % 8
-        square = chr(ord('A') + col) + str(row)
+        square = chr(ord('A') + row) + str(col)
         
         # Add the 3 states for this square
         if idx < n_features:
@@ -100,7 +100,7 @@ def create_pbs_feature_names(n_features: int) -> List[str]:
     for i in range(min(64, n_features - idx)):
         row = i // 8
         col = i % 8
-        square = chr(ord('A') + col) + str(row)  # A0, B0, ..., H7
+        square = chr(ord('A') + row) + str(col)
         feature_names.append(f"{square}_just_played")
         idx += 1
     
@@ -108,7 +108,7 @@ def create_pbs_feature_names(n_features: int) -> List[str]:
     for i in range(min(64, n_features - idx)):
         row = i // 8
         col = i % 8
-        square = chr(ord('A') + col) + str(row)
+        square = chr(ord('A') + row) + str(col)
         feature_names.append(f"{square}_pre_occupied")
         idx += 1
     
@@ -122,7 +122,7 @@ def create_pbs_feature_names(n_features: int) -> List[str]:
     for i in range(min(64, n_features - idx)):
         row = i // 8
         col = i % 8
-        square = chr(ord('A') + col) + str(row)
+        square = chr(ord('A') + row) + str(col)
         feature_names.append(f"{square}_flipped")
         idx += 1
     
@@ -150,7 +150,7 @@ def create_bs_feature_names(n_features: int) -> List[str]:
     for square_idx in range(min(64, (n_features - idx) // 3)):
         row = square_idx // 8  
         col = square_idx % 8
-        square = chr(ord('A') + col) + str(row)
+        square = chr(ord('A') + row) + str(col)
         
         # Add the 3 states for this square
         if idx < n_features:
@@ -167,7 +167,7 @@ def create_bs_feature_names(n_features: int) -> List[str]:
     for i in range(min(64, n_features - idx)):
         row = i // 8
         col = i % 8
-        square = chr(ord('A') + col) + str(row)  # A0, B0, ..., H7
+        square = chr(ord('A') + row) + str(col)
         feature_names.append(f"{square}_just_played")
         idx += 1
     
@@ -175,7 +175,7 @@ def create_bs_feature_names(n_features: int) -> List[str]:
     for i in range(min(64, n_features - idx)):
         row = i // 8
         col = i % 8
-        square = chr(ord('A') + col) + str(row)
+        square = chr(ord('A') + row) + str(col)
         feature_names.append(f"{square}_pre_occupied")
         idx += 1
     
@@ -189,7 +189,7 @@ def create_bs_feature_names(n_features: int) -> List[str]:
     for i in range(min(64, n_features - idx)):
         row = i // 8
         col = i % 8
-        square = chr(ord('A') + col) + str(row)
+        square = chr(ord('A') + row) + str(col)
         feature_names.append(f"{square}_flipped")
         idx += 1
     
