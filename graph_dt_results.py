@@ -561,9 +561,9 @@ def plot_dataset_size_comparison(metric: str, test_size: int):
         # for key in mean_ablate_per_layers.keys():
         #     metric_per_layers[key] = mean_ablate_per_layers[key]
 
+    metric_per_layers = dict(sorted(metric_per_layers.items(), key=lambda key: key))
     print("Metric keys:", list(metric_per_layers.keys()))
-
-                
+    
     all_layers = set()
     for _, trainer_ids in metric_per_layers.items():
         for _, layer_results in trainer_ids.items():
