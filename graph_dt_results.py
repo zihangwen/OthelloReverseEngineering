@@ -141,6 +141,7 @@ def extract_ablation_results(
     input_location_filter: Optional[str] = None,
     func_name_filter: Optional[str] = None,
     desired_layer_tuples: Optional[List[Tuple[int]]] = None,
+    r2_threshold: float = 0.7,
 ) -> Dict:
     if desired_metric not in SAE_METRICS:
         raise ValueError(f"desired_metric must be one of {SAE_METRICS}")
@@ -182,7 +183,7 @@ def extract_ablation_results(
                     continue
                 if custom_function_name in func_results:
                     if desired_metric == "r2":
-                        good_dt_r2, good_f1 = calculate_good_features(func_results[custom_function_name], 0.7)
+                        good_dt_r2, good_f1 = calculate_good_features(func_results[custom_function_name], r2_threshold)
                         result = good_dt_r2
                     else:
                         result = func_results[custom_function_name][desired_metric]
@@ -630,6 +631,80 @@ def plot_dataset_size_comparison_r2_neurons(
 
     return r2_diff
 
+
+def plot_different_r2_threshold(test_size: int, group_by: str = "decision_tree_file", df_select: str = "decision_trees_mlp_neuron_6000.pkl", r2_threshold_list: list[float] = [0.5, 0.7, 0.9]):
+    """Plot overlays comparing the same metric across different dataset sizes"""
+    
+    plt.figure(figsize=(12, 8))
+    
+    colors = ['blue', 'red', 'green', 'orange', 'purple']
+    markers = ['o', 's', '^', 'D', 'v']
+    
+    results_data = load_results_pickle_files(directory, test_size)
+    print(f"Loaded {len(results_data)} results files")
+
+    metric_per_layers_dict = {}
+    print("Loading data files...")
+    for r2_threshold in r2_threshold_list:
+        print(f"\n--- R² threshold: {r2_threshold} ---")
+        metric_per_layers = extract_ablation_results(
+            results_data,
+            custom_function_names,
+            "r2",
+            group_by,
+            input_location_filter=None,
+            func_name_filter=None,
+            desired_layer_tuples=list(range(8)),
+            r2_threshold=r2_threshold,
+        )
+        metric_per_layers_dict[r2_threshold] = metric_per_layers
+
+    # dt_file_list = []
+    # for data in results_data:
+    #     hyperparams = data["hyperparameters"]
+    #     dt_file_list.append(os.path.basename(hyperparams["decision_tree_file"]))
+    
+    # indices = [idx for idx, df_file in enumerate(dt_file_list) if df_file == df_select]
+    # index = indices[0] if indices else None
+
+    all_layers = set()
+    for _, trainer_ids in metric_per_layers.items():
+        for _, layer_results in trainer_ids.items():
+            all_layers.update(layer_results.keys())
+    
+    all_layers = sorted(all_layers)
+    for r2_threshold, metric_per_layers in metric_per_layers_dict.items():
+        print(metric_per_layers[df_select])
+        for i, (_, layer_results) in enumerate(metric_per_layers[df_select].items()):
+            values = [layer_results.get(layer, np.nan) for layer in all_layers]
+            # full_label = f"{display_label} ({ds_size} training games)"
+            plt.plot(
+                range(len(all_layers)),
+                values,
+                marker=markers[i % len(markers)],
+                # color=colors[i % len(colors)],
+                linestyle='-',
+                linewidth=2,
+                markersize=6,
+                label=f"R² > {r2_threshold}",
+            )
+
+    
+    plt.xlabel("Layer")
+    plt.ylabel("Number of Neurons")
+    plt.title("Decision Tree Interpretable Neuron Count Comparison Across R² Thresholds\n(Evaluated on 500-game test set)")
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+    if all_layers:
+        layer_labels = [str(layer) for layer in all_layers]
+        plt.xticks(range(len(all_layers)), layer_labels)
+    
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(f"neuron_simulation/images/dt_6000/r2_threshold_comparison.png", dpi=300, bbox_inches='tight')
+    plt.show()
+
+
 # %%
 # Create overlay plots comparing different dataset sizes (60, 600, 6000)
 directory = "neuron_simulation/decision_trees_bs_eval"
@@ -659,6 +734,7 @@ group_by = "decision_tree_file"
 test_size = 500  # Fixed test size for comparison
 metrics_to_compare = ["patch_accuracy", "kl", "r2"]
 
+# ----- ----- ----- ----- ----- dataset size comparison plots ----- ----- ----- ----- ----- #
 # print("Creating dataset size comparison plots...")
 # for metric in metrics_to_compare:
 #     print(f"\n=== Creating {metric.upper()} comparison plot ===")
@@ -666,25 +742,29 @@ metrics_to_compare = ["patch_accuracy", "kl", "r2"]
 
 # print("\nAll comparison plots created successfully!")
 
-r2_diff = plot_dataset_size_comparison_r2_neurons(
-    layer=5,
-    test_size=test_size,
-    tree_file_select=[
-        "decision_trees_mlp_neuron_6000.pkl",
-        "decision_trees_mlp_neuron_600.pkl",
-    ],
-)
+# ----- ----- ----- ----- ----- r2 per neuron ----- ----- ----- ----- ----- #
+# r2_diff = plot_dataset_size_comparison_r2_neurons(
+#     layer=5,
+#     test_size=test_size,
+#     tree_file_select=[
+#         "decision_trees_mlp_neuron_6000.pkl",
+#         "decision_trees_mlp_neuron_600.pkl",
+#     ],
+# )
 
-r2_diff_negative = r2_diff < 0
-r2_diff_negative_indices = np.where(r2_diff_negative)[0]
-r2_diff_negative_scores = r2_diff[r2_diff_negative_indices]
+# r2_diff_negative = r2_diff < 0
+# r2_diff_negative_indices = np.where(r2_diff_negative)[0]
+# r2_diff_negative_scores = r2_diff[r2_diff_negative_indices]
 
-sorted_pairs = sorted(zip(r2_diff_negative_scores, r2_diff_negative_indices))  # Sort by b
-r2_diff_negative_scores, r2_diff_negative_indices = zip(*sorted_pairs)  # Unzip back to separate lists
+# sorted_pairs = sorted(zip(r2_diff_negative_scores, r2_diff_negative_indices))  # Sort by b
+# r2_diff_negative_scores, r2_diff_negative_indices = zip(*sorted_pairs)  # Unzip back to separate lists
 
-print("number of negative R² differences:", len(r2_diff_negative_scores))
-print("negative neuron indexs:", *r2_diff_negative_indices)
-print("negative neuron scores:", *r2_diff_negative_scores)
+# print("number of negative R² differences:", len(r2_diff_negative_scores))
+# print("negative neuron indexs:", *r2_diff_negative_indices)
+# print("negative neuron scores:", *r2_diff_negative_scores)
+
+# ----- ----- ----- ----- ----- r2 with different threshold ----- ----- ----- ----- ----- #
+plot_different_r2_threshold(test_size, group_by, df_select = "decision_trees_mlp_neuron_6000.pkl", r2_threshold_list=[0.5, 0.7, 0.9])
 
 # %%
 
