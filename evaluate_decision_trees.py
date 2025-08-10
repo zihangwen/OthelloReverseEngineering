@@ -237,6 +237,7 @@ def evaluate_dt(
             print(f"Evaluating with ablation_method={ablation_method}, "
                   f"ablate_not_selected={ablate_not_selected}, add_error={add_error}")
             
+            ab_hyperparameters = hyperparameters.copy()
             if ablation_method == "dt":
                 ablation_filename = (
                     f"{output_location}/ablation_results_{input_location}_{ablation_method}_"
@@ -254,9 +255,6 @@ def evaluate_dt(
             if os.path.exists(ablation_filename):
                 print(f"Skipping existing ablation results file: {ablation_filename}")
                 continue
-            
-            ab_hyperparameters = hyperparameters.copy()
-            
 
             ablations = perform_interventions(
                 decision_trees=decision_trees,
@@ -289,7 +287,8 @@ def main():
     ]
     input_location = "mlp_neuron"
     trainer_id = 0
-    ablation_methods = ["dt", "mean"]
+    ablation_methods = ["dt", "mean", "zero"]
+    # ablation_methods = ["zero", "mean"]
     intervention_layers = [[0], [1], [2], [3], [4], [5], [6], [7]]
     custom_functions = [othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC]
     model_name = "Baidicoot/Othello-GPT-Transformer-Lens"

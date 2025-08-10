@@ -99,8 +99,9 @@ def calculate_good_features(results: Dict[str, Any], threshold: float) -> Tuple[
     return good_dt_r2, good_f1
 
 
-def extract_mean_ablation_results(
+def extract_other_ablation_results(
     data: List[Dict],
+    ablation_method: str,
     desired_metric: str,
     desired_layer_tuples: Optional[List[Tuple[int]]] = None,
 ) -> Dict:
@@ -111,7 +112,7 @@ def extract_mean_ablation_results(
     nested_results = {}
     for run in data:
         hyperparams = run["hyperparameters"]
-        input_location = hyperparams["input_location"] + "_mean_ablate"
+        input_location = hyperparams["input_location"] + f"_{ablation_method}_ablate"
         trainer_id = hyperparams["trainer_id"]
 
         nested_results[input_location] = {trainer_id: {}}
@@ -362,8 +363,8 @@ def extract_ablation_results(
 #         )
         
 #         # Add mean ablation baseline
-#         mean_ablate_per_layers = extract_mean_ablation_results(
-#             mean_ablate_data, desired_metric, desired_layer_tuples
+#         mean_ablate_per_layers = extract_other_ablation_results(
+#             mean_ablate_data, "mean", desired_metric, desired_layer_tuples
 #         )
 #         for key in mean_ablate_per_layers.keys():
 #             metric_per_layers[key] = mean_ablate_per_layers[key]
@@ -509,9 +510,11 @@ def plot_dataset_size_comparison(metric: str, test_size: int, group_by: str = "d
             directory, test_size, ablation_method, ablate_not_selected, add_error
         )
         mean_ablate_data = load_ablation_pickle_files(directory, test_size, "mean", True, True)
+        zero_ablate_data = load_ablation_pickle_files(directory, test_size, "zero", True, True)
 
         print(f"Loaded {len(ablation_data)} ablation files")
         print(f"Loaded {len(mean_ablate_data)} mean ablation files")
+        print(f"Loaded {len(zero_ablate_data)} zero ablation files")
 
         metric_per_layers = extract_ablation_results(
             ablation_data,
@@ -523,11 +526,17 @@ def plot_dataset_size_comparison(metric: str, test_size: int, group_by: str = "d
             desired_layer_tuples=desired_layer_tuples,
         )
 
-        # mean_ablate_per_layers = extract_mean_ablation_results(
-        #     mean_ablate_data, metric, desired_layer_tuples
-        # )
-        # for key in mean_ablate_per_layers.keys():
-        #     metric_per_layers[key] = mean_ablate_per_layers[key]
+        mean_ablate_per_layers = extract_other_ablation_results(
+            mean_ablate_data, "mean", metric, desired_layer_tuples
+        )                
+        for key in mean_ablate_per_layers.keys():
+            metric_per_layers[key] = mean_ablate_per_layers[key]
+
+        zero_ablate_per_layers = extract_other_ablation_results(
+            zero_ablate_data, "zero", metric, desired_layer_tuples
+        )
+        for key in zero_ablate_per_layers.keys():
+            metric_per_layers[key] = zero_ablate_per_layers[key]
 
     metric_per_layers = dict(sorted(metric_per_layers.items(), key=lambda key: key))
     print("Metric keys:", list(metric_per_layers.keys()))
@@ -538,6 +547,8 @@ def plot_dataset_size_comparison(metric: str, test_size: int, group_by: str = "d
             all_layers.update(layer_results.keys())
     
     all_layers = sorted(all_layers)
+
+    # all_layers = all_layers[1:]  # Skip layer 0 for clearer visualization
     
     for i, (individual_label, trainer_ids) in enumerate(metric_per_layers.items()):
         for _, layer_results in trainer_ids.items():
@@ -576,7 +587,7 @@ def plot_dataset_size_comparison(metric: str, test_size: int, group_by: str = "d
     
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(f"neuron_simulation/images/{metric}_dataset_size_comparison.png", dpi=300, bbox_inches='tight')
+    plt.savefig(f"neuron_simulation/images/{metric}_dataset_size_comparison_mean.png", dpi=300, bbox_inches='tight')
     plt.show()
 
 
@@ -735,12 +746,12 @@ test_size = 500  # Fixed test size for comparison
 metrics_to_compare = ["patch_accuracy", "kl", "r2"]
 
 # ----- ----- ----- ----- ----- dataset size comparison plots ----- ----- ----- ----- ----- #
-# print("Creating dataset size comparison plots...")
-# for metric in metrics_to_compare:
-#     print(f"\n=== Creating {metric.upper()} comparison plot ===")
-#     plot_dataset_size_comparison(metric, test_size, group_by)
+print("Creating dataset size comparison plots...")
+for metric in metrics_to_compare:
+    print(f"\n=== Creating {metric.upper()} comparison plot ===")
+    plot_dataset_size_comparison(metric, test_size, group_by)
 
-# print("\nAll comparison plots created successfully!")
+print("\nAll comparison plots created successfully!")
 
 # ----- ----- ----- ----- ----- r2 per neuron ----- ----- ----- ----- ----- #
 # r2_diff = plot_dataset_size_comparison_r2_neurons(
@@ -764,7 +775,7 @@ metrics_to_compare = ["patch_accuracy", "kl", "r2"]
 # print("negative neuron scores:", *r2_diff_negative_scores)
 
 # ----- ----- ----- ----- ----- r2 with different threshold ----- ----- ----- ----- ----- #
-plot_different_r2_threshold(test_size, group_by, df_select = "decision_trees_mlp_neuron_6000.pkl", r2_threshold_list=[0.5, 0.7, 0.9])
+# plot_different_r2_threshold(test_size, group_by, df_select = "decision_trees_mlp_neuron_6000.pkl", r2_threshold_list=[0.5, 0.7, 0.9])
 
 # %%
 
