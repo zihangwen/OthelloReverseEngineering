@@ -724,7 +724,7 @@ def interventions(
             # TODO: There is a bug here with nnsight and proxy value not set.
             if ablation_method == "max":
                 max_activations = encoded_BLF.max(dim=0).values
-                mean_activations[layer] = max_activations.max(dim=0).values.save()
+                max_activations[layer] = max_activations.max(dim=0).values.save()
 
         logits_clean_BLV = model.unembed.output.save()
 
@@ -1348,6 +1348,6 @@ if __name__ == "__main__":
     # example config change
     # 6 batches seems to work reasonably well for training decision trees
     default_config.n_batches = 6
-    default_config.batch_size = 100
+    default_config.batch_size = 10
     run_simulations(default_config)
     print(f"--- {time.time() - start_time} seconds ---")
