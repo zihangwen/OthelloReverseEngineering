@@ -33,8 +33,8 @@ def get_board_states_and_legal_moves(
     """
     # Create tensors to store the board state & legal moves
     n_games, n_moves = games_square.shape
-    states = t.zeros((n_games, 60, 8, 8), dtype=t.int32)
-    legal_moves = t.zeros((n_games, 60, 8, 8), dtype=t.int32)
+    states = t.zeros((n_games, n_moves, 8, 8), dtype=t.int32)
+    legal_moves = t.zeros((n_games, n_moves, 8, 8), dtype=t.int32)
 
     # Loop over each game, populating state & legal moves tensors after each move
     for n in range(n_games):

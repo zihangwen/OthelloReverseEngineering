@@ -5,6 +5,7 @@
 # 2. Load + run linear probes
 # 3. Load + visualize decision trees
 import pickle
+from collections import defaultdict
 import torch as t
 import numpy as np
 import einops
@@ -15,7 +16,7 @@ import circuits.utils as utils
 import circuits.othello_utils as othello_utils
 from circuits.eval_sae_as_classifier import construct_othello_dataset
 from transformer_lens import ActivationCache, HookedTransformer
-from transformer_lens.utils import to_numpy
+from transformer_lens.utils import to_numpy, get_act_name
 from torch import Tensor
 from IPython.display import HTML, display
 from jaxtyping import Bool, Float, Int
@@ -200,3 +201,13 @@ arena_utils.plot_board_values(
 )
 
 # %%
+layers = [_ for _ in range(model.cfg.n_layers)]
+neuron_acts = {}
+with t.no_grad(), model.trace(focus_games_id.to(device), scan=False, validate=False):
+    for layer in layers:
+        neuron_activations_BLD = model.blocks[layer].mlp.hook_post.output.save()
+        neuron_acts[layer] = neuron_activations_BLD
+
+# %%
+# (focus_cache[get_act_name("mlp_post",0)] == neuron_acts[0]).all()
+# t.isclose(focus_cache[get_act_name("mlp_post",0)], neuron_acts[0]).all()
