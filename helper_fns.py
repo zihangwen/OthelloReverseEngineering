@@ -108,6 +108,34 @@ def get_w_out(
         w_out /= w_out.norm(dim=0, keepdim=True)
     return w_out
 
+def get_w_out_all(
+    model: HookedTransformer,
+    normalize: bool = False,
+) -> Float[Tensor, "layer neuron d_model"]:
+    """
+    Returns the output weights for the given neuron.
+
+    If normalize is True, the weight is normalized to unit norm.
+    """
+    w_out = model.W_out.detach().clone()
+    if normalize:
+        w_out /= w_out.norm(dim=-1, keepdim=True)
+    return w_out
+
+def get_w_U(
+    model: HookedTransformer,
+    normalize: bool = False,
+) -> Float[Tensor, "d_model token_id"]:
+    """
+    Returns the W_U weights for the model.
+
+    If normalize is True, the weight is normalized to unit norm.
+    """
+    w_U = model.W_U[:, 1:].detach().clone()  # Exclude the "pass" move
+    if normalize:
+        w_U /= w_U.norm(dim=0, keepdim=True)
+    return w_U
+
 def calculate_neuron_input_weights(
     model: HookedTransformer, probe: Float[Tensor, "d_model row col"], layer: int, neuron: int
 ) -> Float[Tensor, "rows cols"]:
