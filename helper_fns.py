@@ -12,10 +12,101 @@ from jaxtyping import Bool, Float, Int
 from typing import Optional, List
 
 import neuron_simulation.arena_utils as arena_utils
-
+from simulate_activations_with_dts import (
+    compute_kl_divergence,
+    compute_top_n_accuracy,
+)
 
 MIDDLE_SQUARES = [27, 28, 35, 36]
 ALL_SQUARES = [i for i in range(64) if i not in MIDDLE_SQUARES]
+tracer_kwargs = {"validate": True, "scan": True}
+
+# %%
+def neuron_intervention(
+    model,
+    layers_neurons: dict[list],
+    game_batch_BL: t.Tensor,
+    ablation_method: str = "zero",
+):
+    # allowed_methods = ["mean", "zero", "max"]
+    allowed_methods = ["zero"]
+    assert ablation_method in allowed_methods, (
+        f"Invalid ablation method. Must be one of {allowed_methods}"
+    )
+
+    mean_activations = {}
+    max_activations = {}
+
+    # Get clean logits and mean submodule activations
+    with t.no_grad(), model.trace(game_batch_BL, **tracer_kwargs):
+        # for layer in layers:
+        #     original_input_BLD = model.blocks[layer].mlp.hook_post.output
+        #     mean_activations[layer] = original_input_BLD.mean(dim=(0, 1)).save()
+        #     max_activations = original_input_BLD.max(dim=0).values
+        #     max_activations[layer] = max_activations.max(dim=0).values.save()
+        logits_clean_BLV = model.unembed.output.save()
+    
+    with t.no_grad(), model.trace(game_batch_BL, **tracer_kwargs):
+        for layer, neuron_indices in layers_neurons.items():
+            original_input_BLD = model.blocks[layer].mlp.hook_post.output
+            if ablation_method == "zero":
+                original_input_BLD[:, :, neuron_indices] = 0.0
+            elif ablation_method == "mean":
+                raise NotImplementedError("Mean ablation not implemented yet.")
+            elif ablation_method == "max":
+                raise NotImplementedError("Max ablation not implemented yet.")
+        
+        logits_patch_BLV = model.unembed.output.save()
+    
+    return logits_clean_BLV, logits_patch_BLV
+
+# %%
+def calculate_ablation_scores_game_move(model, layers_neurons, focus_games_id, focus_legal_moves, move, ablation_method = "zero"):
+    logits_clean_BLV, logits_patch_BLV = neuron_intervention(
+        model,
+        layers_neurons=layers_neurons,
+        game_batch_BL=focus_games_id,
+        ablation_method=ablation_method,
+    )
+
+    logits_clean_BLV_move = logits_clean_BLV[:, move].unsqueeze(1) # [1, 1, ids]
+    logits_patch_BLV_move = logits_patch_BLV[:, move].unsqueeze(1) # [1, 1, ids]
+    focus_legal_moves_move = focus_legal_moves[:, move].unsqueeze(1).unsqueeze(-1)  # [1, 1, row, col, 1]
+
+    kl_div_BL = compute_kl_divergence(logits_clean_BLV_move, logits_patch_BLV_move)
+
+    _, _, clean_accuracy = compute_top_n_accuracy(
+        logits_clean_BLV_move, focus_legal_moves_move
+    )
+
+    _, _, patch_accuracy = compute_top_n_accuracy(
+        logits_patch_BLV_move, focus_legal_moves_move
+    )
+
+    return kl_div_BL.mean().item(), clean_accuracy, patch_accuracy
+
+# %%
+def calculate_ablation_scores_square(model, layers_neurons, board_seqs_id, valid_move_square_mask, valid_move_number, token_id, ablation_method = "zero"):
+    logits_clean_BLV, logits_patch_BLV = neuron_intervention(
+        model,
+        layers_neurons=layers_neurons,
+        game_batch_BL=board_seqs_id,
+        ablation_method=ablation_method,
+    )
+
+    kl_div_BL = compute_kl_divergence(logits_clean_BLV, logits_patch_BLV)
+
+    logits_clean_rank_token = (logits_clean_BLV > logits_clean_BLV[...,token_id].unsqueeze(-1)).sum(-1)
+    clean_total = valid_move_square_mask.sum()
+    clean_correct = ((logits_clean_rank_token < valid_move_number) * valid_move_square_mask).sum()
+    clean_accuracy = clean_correct / clean_total
+
+    logits_patch_rank_token = (logits_patch_BLV > logits_patch_BLV[...,token_id].unsqueeze(-1)).sum(-1)
+    patch_total = valid_move_square_mask.sum()
+    patch_correct = ((logits_patch_rank_token < valid_move_number) * valid_move_square_mask).sum()
+    patch_accuracy = patch_correct / patch_total
+
+    return kl_div_BL.mean().item(), clean_accuracy.item(), patch_accuracy.item()
 
 # %%
 def get_board_states_and_legal_moves(

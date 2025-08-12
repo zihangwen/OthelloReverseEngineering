@@ -21,6 +21,8 @@ from helper_fns import (
     # MIDDLE_SQUARES,
     ALL_SQUARES,
     get_board_states_and_legal_moves,
+    calculate_ablation_scores_game_move,
+    calculate_ablation_scores_square,
     # plot_probe_outputs,
     # get_w_in,
     # get_w_out,
@@ -28,14 +30,13 @@ from helper_fns import (
     # calculate_neuron_output_weights,
     # create_feature_names,
 )
-from simulate_activations_with_dts import (
-    compute_kl_divergence,
-    compute_top_n_accuracy,
-)
+# from simulate_activations_with_dts import (
+#     compute_kl_divergence,
+#     compute_top_n_accuracy,
+# )
 
 device = "cuda" if t.cuda.is_available() else "cpu"
 t.set_grad_enabled(False)
-tracer_kwargs = {"validate": True, "scan": True}
 
 print(f"Using device: {device}")
 
@@ -74,44 +75,8 @@ test_data = construct_othello_dataset(
 board_seqs_id = t.tensor(test_data["encoded_inputs"]).long().to(device)
 board_seqs_square = t.tensor(test_data["decoded_inputs"]).long().to(device)
 
-# %%
-def neuron_intervention(
-    model,
-    layers_neurons: dict[list],
-    game_batch_BL: t.Tensor,
-    ablation_method: str = "zero",
-):
-    # allowed_methods = ["mean", "zero", "max"]
-    allowed_methods = ["zero"]
-    assert ablation_method in allowed_methods, (
-        f"Invalid ablation method. Must be one of {allowed_methods}"
-    )
-
-    mean_activations = {}
-    max_activations = {}
-
-    # Get clean logits and mean submodule activations
-    with t.no_grad(), model.trace(game_batch_BL, **tracer_kwargs):
-        # for layer in layers:
-        #     original_input_BLD = model.blocks[layer].mlp.hook_post.output
-        #     mean_activations[layer] = original_input_BLD.mean(dim=(0, 1)).save()
-        #     max_activations = original_input_BLD.max(dim=0).values
-        #     max_activations[layer] = max_activations.max(dim=0).values.save()
-        logits_clean_BLV = model.unembed.output.save()
-    
-    with t.no_grad(), model.trace(game_batch_BL, **tracer_kwargs):
-        for layer, neuron_indices in layers_neurons.items():
-            original_input_BLD = model.blocks[layer].mlp.hook_post.output
-            if ablation_method == "zero":
-                original_input_BLD[:, :, neuron_indices] = 0.0
-            elif ablation_method == "mean":
-                raise NotImplementedError("Mean ablation not implemented yet.")
-            elif ablation_method == "max":
-                raise NotImplementedError("Max ablation not implemented yet.")
-        
-        logits_patch_BLV = model.unembed.output.save()
-    
-    return logits_clean_BLV, logits_patch_BLV
+board_states, legal_moves, legal_moves_annotation = get_board_states_and_legal_moves(board_seqs_square)
+legal_moves = legal_moves.to(device=device, dtype=t.float32)
 
 # %% writing neuron
 n_layers = model.cfg.n_layers
@@ -130,10 +95,6 @@ write_attribution = einops.einsum(
 
 write_attribution_square = t.zeros((n_layers, n_neurons, 8, 8), device=device, dtype=t.float32)
 write_attribution_square.flatten(start_dim=-2, end_dim=-1)[..., ALL_SQUARES] = write_attribution
-
-# %%
-board_states, legal_moves, legal_moves_annotation = get_board_states_and_legal_moves(board_seqs_square)
-legal_moves = legal_moves.to(device=device, dtype=t.float32)
 
 # %% ----- ----- ----- ----- ----- ----- specific game and move ----- ----- ----- ----- ----- ----- %% #
 game_index = 42
@@ -176,30 +137,6 @@ neuron_attribution = t.stack(
 )  # [game, seq, layer, neuron]
 
 neuron_attribution = neuron_attribution[0, move]  # [layer, neuron]
-# %%
-def calculate_ablation_scores(layers_neurons, focus_games_id, move, ablation_method = "zero"):
-    logits_clean_BLV, logits_patch_BLV = neuron_intervention(
-        model,
-        layers_neurons=layers_neurons,
-        game_batch_BL=focus_games_id,
-        ablation_method=ablation_method,
-    )
-
-    logits_clean_BLV_move = logits_clean_BLV[:, move].unsqueeze(1) # [1, 1, ids]
-    logits_patch_BLV_move = logits_patch_BLV[:, move].unsqueeze(1) # [1, 1, ids]
-    focus_legal_moves_move = focus_legal_moves[:, move].unsqueeze(1).unsqueeze(-1)  # [1, 1, row, col, 1]
-
-    kl_div_BL = compute_kl_divergence(logits_clean_BLV_move, logits_patch_BLV_move)
-
-    _, _, clean_accuracy = compute_top_n_accuracy(
-        logits_clean_BLV_move, focus_legal_moves_move
-    )
-
-    _, _, patch_accuracy = compute_top_n_accuracy(
-        logits_patch_BLV_move, focus_legal_moves_move
-    )
-
-    return kl_div_BL.mean().item(), clean_accuracy, patch_accuracy
 
 # %% ablation with topk neurons from a layer
 layers = [_ for _ in range(n_layers)]
@@ -219,9 +156,11 @@ for topk in topk_list:
         topk_neuron_idx = t.topk(neuron_attribution[layer].flatten(), k=topk).indices
         # topk_neurons[topk][layer] = topk_neuron_idx
         
-        kl_div_BL, clean_accuracy, patch_accuracy = calculate_ablation_scores(
+        kl_div_BL, clean_accuracy, patch_accuracy = calculate_ablation_scores_game_move(
+            model,
             layers_neurons={layer: topk_neuron_idx},
             focus_games_id=focus_games_id.to(device),
+            focus_legal_moves=focus_legal_moves.to(device),
             move=move,
             ablation_method="zero",
         )
@@ -235,9 +174,11 @@ for topk in topk_list:
         randk_neuron_idx = t.randperm(n_neurons)[:topk]
         # randk_neurons[topk][layer] = randk_neuron_idx
 
-        randk_kl_div_BL, randk_clean_accuracy, randk_patch_accuracy = calculate_ablation_scores(
+        randk_kl_div_BL, randk_clean_accuracy, randk_patch_accuracy = calculate_ablation_scores_game_move(
+            model,
             layers_neurons={layer: randk_neuron_idx},
             focus_games_id=focus_games_id.to(device),
+            focus_legal_moves=focus_legal_moves.to(device),
             move=move,
             ablation_method="zero",
         )
@@ -306,9 +247,11 @@ for topk in topk_list:
 topk_scores = defaultdict(dict)
 randk_scores = defaultdict(dict)
 for topk in topk_list:
-    kl_div_BL, clean_accuracy, patch_accuracy = calculate_ablation_scores(
+    kl_div_BL, clean_accuracy, patch_accuracy = calculate_ablation_scores_game_move(
+        model,
         layers_neurons=topk_neurons[topk],
         focus_games_id=focus_games_id.to(device),
+        focus_legal_moves=focus_legal_moves.to(device),
         move=move,
         ablation_method="zero",
     )
@@ -318,9 +261,11 @@ for topk in topk_list:
         "patch_accuracy": patch_accuracy,
     }
 
-    randk_kl_div_BL, randk_clean_accuracy, randk_patch_accuracy = calculate_ablation_scores(
+    randk_kl_div_BL, randk_clean_accuracy, randk_patch_accuracy = calculate_ablation_scores_game_move(
+        model,
         layers_neurons=randk_neurons[topk],
         focus_games_id=focus_games_id.to(device),
+        focus_legal_moves=focus_legal_moves.to(device),
         move=move,
         ablation_method="zero",
     )
@@ -360,6 +305,7 @@ token_id = arena_utils.SQUARE_TO_ID[square_idx]
 print(f"Square {square_idx} ({arena_utils.to_board_label(square_idx)}), Token ID: {token_id}")
 
 valid_move_square_mask = legal_moves.flatten(start_dim=-2, end_dim=-1)[..., square_idx] # [game, seq]
+valid_move_number = legal_moves.sum(dim=(-2,-1))  # [game, seq]
 
 neuron_attribution = {}
 with t.no_grad(), model.trace(board_seqs_id, scan=False, validate=False):
@@ -381,25 +327,30 @@ neuron_attribution = t.stack(
 )  # [game, seq, layer, neuron]
 
 neuron_attribution *= valid_move_square_mask[..., None, None]
-neuron_attribution = neuron_attribution.mean(dim=(0, 1))  # [layer, neuron]
+neuron_attribution = neuron_attribution.sum(dim=(0, 1))  # [layer, neuron]
+
 
 # %% ablation with topk neurons from a layer
 layers = [_ for _ in range(n_layers)]
 topk_list = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
-topk_neurons = defaultdict(lambda: defaultdict(list))
-randk_neurons = defaultdict(lambda: defaultdict(list))
+# topk_list = [16]
+# topk_neurons = defaultdict(lambda: defaultdict(list))
+# randk_neurons = defaultdict(lambda: defaultdict(list))
 topk_scores = defaultdict(lambda: defaultdict(dict))
 randk_scores = defaultdict(lambda: defaultdict(dict))
 for topk in topk_list:
     for layer in layers:
         # Get the top-k neurons for the current layer
         topk_neuron_idx = t.topk(neuron_attribution[layer].flatten(), k=topk).indices
-        topk_neurons[topk][layer] = topk_neuron_idx
+        # topk_neurons[topk][layer] = topk_neuron_idx
         
-        kl_div_BL, clean_accuracy, patch_accuracy = calculate_ablation_scores(
+        kl_div_BL, clean_accuracy, patch_accuracy = calculate_ablation_scores_square(
+            model,
             layers_neurons={layer: topk_neuron_idx},
-            focus_games_id=focus_games_id.to(device),
-            move=move,
+            board_seqs_id=board_seqs_id.to(device),
+            valid_move_square_mask=valid_move_square_mask.to(device),
+            valid_move_number=valid_move_number.to(device),
+            token_id=token_id,
             ablation_method="zero",
         )
         topk_scores[topk][layer] = {
@@ -409,6 +360,142 @@ for topk in topk_list:
         }
 
         t.manual_seed(layer)
+        randk_neuron_idx = t.randperm(n_neurons)[:topk]
+        # randk_neurons[topk][layer] = randk_neuron_idx
+
+        randk_kl_div_BL, randk_clean_accuracy, randk_patch_accuracy = calculate_ablation_scores_square(
+            model,
+            layers_neurons={layer: randk_neuron_idx},
+            board_seqs_id=board_seqs_id.to(device),
+            valid_move_square_mask=valid_move_square_mask.to(device),
+            valid_move_number=valid_move_number.to(device),
+            token_id=token_id,
+            ablation_method="zero",
+        )
+        randk_scores[topk][layer] = {
+            "kl_div_BL": randk_kl_div_BL,
+            "clean_accuracy": randk_clean_accuracy,
+            "patch_accuracy": randk_patch_accuracy,
+        }
+
+fig, ax = plt.subplots(2,4, figsize=(20, 8))
+axes = ax.flatten()
+for layer in layers:
+    kl_list_topk = [layer_info[layer]["kl_div_BL"] for _, layer_info in topk_scores.items()]
+    kl_list_randk = [layer_info[layer]["kl_div_BL"] for _, layer_info in randk_scores.items()]
+    axes[layer].plot(topk_list, kl_list_topk, label="Top-k", marker='o')
+    axes[layer].plot(topk_list, kl_list_randk, label="Random-k", marker='x')
+    axes[layer].set_title(f"Layer {layer}")
+    axes[layer].set_xlabel("Top-k Neurons")
+    axes[layer].set_ylabel("KL Divergence")
+    axes[layer].set_xscale("log", base=2)
+axes[-1].legend()
+fig.suptitle(f"KL Divergence for Top-k and Random-k Neurons\nSquare {square_idx} ({arena_utils.to_board_label(square_idx)}), Token ID: {token_id}")
+fig.tight_layout()
+fig.savefig(f"figures/topk_kl_divergence_layer_level_square{square_idx}_token{token_id}.png", dpi=600)
+
+fig, ax = plt.subplots(2,4, figsize=(20, 8))
+axes = ax.flatten()
+for layer in layers:
+    patch_acc_list_topk = [layer_info[layer]["patch_accuracy"] for _, layer_info in topk_scores.items()]
+    patch_acc_list_randk = [layer_info[layer]["patch_accuracy"] for _, layer_info in randk_scores.items()]
+    axes[layer].plot(topk_list, patch_acc_list_topk, label="Top-k", marker='o')
+    axes[layer].plot(topk_list, patch_acc_list_randk, label="Random-k", marker='x')
+    axes[layer].set_title(f"Layer {layer}")
+    axes[layer].set_xlabel("Top-k Neurons")
+    axes[layer].set_ylabel("Patch Accuracy")
+    axes[layer].set_xscale("log", base=2)
+axes[-1].legend()
+fig.suptitle(f"Patch Accuracy for Top-k and Random-k Neurons\nSquare {square_idx} ({arena_utils.to_board_label(square_idx)}), Token ID: {token_id}")
+fig.tight_layout()
+fig.savefig(f"figures/topk_patch_accuracy_layer_level_square{square_idx}_token{token_id}.png", dpi=600)
+
+# %% ablation with topk neurons across layers
+topk_list = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
+topk_neurons = defaultdict(lambda: defaultdict(list))
+randk_neurons = defaultdict(lambda: defaultdict(list))
+for topk in topk_list:
+    topk_neuron_idx = t.topk(neuron_attribution.flatten(), k=topk).indices
+    for idx in topk_neuron_idx:
+        layer = idx // n_neurons
+        neuron = idx % n_neurons
+        topk_neurons[topk][layer.item()].append(neuron.item())
+
+    topk_temp = sorted(topk_neurons[topk].items(), key=lambda kv: kv[0])
+    topk_neurons[topk] = defaultdict(list, topk_temp)
+    
+    t.manual_seed(topk)  # For reproducibility
+    randk_neuron_idx = t.randperm(n_layers * n_neurons)[:topk]
+    for idx in randk_neuron_idx:
+        layer = idx // n_neurons
+        neuron = idx % n_neurons
+        randk_neurons[topk][layer.item()].append(neuron.item())
+    
+    randk_temp = sorted(randk_neurons[topk].items(), key=lambda kv: kv[0])
+    randk_neurons[topk] = defaultdict(list, randk_temp)
+
+topk_scores = defaultdict(dict)
+randk_scores = defaultdict(dict)
+for topk in topk_list:
+    kl_div_BL, clean_accuracy, patch_accuracy = calculate_ablation_scores_square(
+        model,
+        layers_neurons=topk_neurons[topk],
+        board_seqs_id=board_seqs_id.to(device),
+        valid_move_square_mask=valid_move_square_mask.to(device),
+        valid_move_number=valid_move_number.to(device),
+        token_id=token_id,
+        ablation_method="zero",
+    )
+    topk_scores[topk] = {
+        "kl_div_BL": kl_div_BL,
+        "clean_accuracy": clean_accuracy,
+        "patch_accuracy": patch_accuracy,
+    }
+
+    randk_kl_div_BL, randk_clean_accuracy, randk_patch_accuracy = calculate_ablation_scores_square(
+        model,
+        layers_neurons=randk_neurons[topk],
+        board_seqs_id=board_seqs_id.to(device),
+        valid_move_square_mask=valid_move_square_mask.to(device),
+        valid_move_number=valid_move_number.to(device),
+        token_id=token_id,
+        ablation_method="zero",
+    )
+    randk_scores[topk] = {
+        "kl_div_BL": randk_kl_div_BL,
+        "clean_accuracy": randk_clean_accuracy,
+        "patch_accuracy": randk_patch_accuracy,
+    }
+
+fig, ax = plt.subplots(1, 2, figsize=(15, 5))
+axes = ax.flatten()
+kl_list_topk = [layer_info["kl_div_BL"] for _, layer_info in topk_scores.items()]
+kl_list_randk = [layer_info["kl_div_BL"] for _, layer_info in randk_scores.items()]
+axes[0].plot(topk_list, kl_list_topk, label="Top-k", marker='o')
+axes[0].plot(topk_list, kl_list_randk, label="Random-k", marker='x')
+axes[0].set_title("KL Divergence for Top-k and Random-k Neurons")
+axes[0].set_xlabel("Top-k Neurons")
+axes[0].set_ylabel("KL Divergence")
+axes[0].set_xscale("log", base=2)
+patch_acc_list_topk = [layer_info["patch_accuracy"] for _, layer_info in topk_scores.items()]
+patch_acc_list_randk = [layer_info["patch_accuracy"] for _, layer_info in randk_scores.items()]
+axes[1].plot(topk_list, patch_acc_list_topk, label="Top-k", marker='o')
+axes[1].plot(topk_list, patch_acc_list_randk, label="Random-k", marker='x')
+axes[1].set_title("Patch Accuracy for Top-k and Random-k Neurons")
+axes[1].set_xlabel("Top-k Neurons")
+axes[1].set_ylabel("Patch Accuracy")
+axes[1].set_xscale("log", base=2)
+axes[1].legend()
+fig.suptitle(f"Square {square_idx} ({arena_utils.to_board_label(square_idx)}), Token ID: {token_id}")
+fig.tight_layout()
+fig.savefig(f"figures/topk_cross_layer_square{square_idx}_token{token_id}.png", dpi=600)
+
+# %% print topk neurons for specific square (cross-layer)
+topk = 32
+print(f"Top {topk} neurons for square {square_idx} ({arena_utils.to_board_label(square_idx)}), token ID {token_id}:")
+for layer, neurons in topk_neurons[topk].items():
+    print(f"Layer {layer}: Neurons {neurons}")
+
 # %%
 # neuron_acts = {}
 # with t.no_grad(), model.trace(board_seqs_id.to(device), scan=False, validate=False):
@@ -491,3 +578,7 @@ for topk in topk_list:
 # print(f"Clean Accuracy: {clean_accuracy:.4f} ({clean_correct}/{clean_total})")
 # print(f"Patch Accuracy: {patch_accuracy:.4f} ({patch_correct}/{patch_total})")
 
+# %% another way to calculate rank
+# logits_patch_order = t.argsort(logits_patch_BLV, dim=-1, descending=True)
+# logits_patch_rank = t.argsort(logits_patch_order, dim=-1)
+# logits_patch_rank_token = logits_patch_rank[..., token_id]  # [game, seq]
