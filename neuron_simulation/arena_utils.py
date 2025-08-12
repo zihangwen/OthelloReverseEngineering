@@ -423,6 +423,8 @@ def plot_board_values(
     fig.show()
     if filename is not None:
         fig.write_html(filename)
+    
+    return fig
 
 
 # def get_valid_moves(sequence):
