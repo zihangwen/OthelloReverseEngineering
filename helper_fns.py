@@ -11,7 +11,7 @@ from IPython.display import HTML, display
 from jaxtyping import Bool, Float, Int
 from typing import Optional, List
 
-import neuron_simulation.arena_utils as arena_utils
+import arena_utils as arena_utils
 from simulate_activations_with_dts import (
     compute_kl_divergence,
     compute_top_n_accuracy,

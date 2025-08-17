@@ -20,7 +20,7 @@ from transformer_lens.utils import to_numpy, get_act_name
 from torch import Tensor
 from IPython.display import HTML, display
 from jaxtyping import Bool, Float, Int
-import neuron_simulation.arena_utils as arena_utils
+import arena_utils as arena_utils
 
 from helper_fns import (
     MIDDLE_SQUARES,
