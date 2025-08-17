@@ -723,8 +723,8 @@ def interventions(
 
             # TODO: There is a bug here with nnsight and proxy value not set.
             if ablation_method == "max":
-                max_activations = encoded_BLF.max(dim=0).values
-                max_activations[layer] = max_activations.max(dim=0).values.save()
+                max_activations_temp = encoded_BLF.max(dim=0).values
+                max_activations[layer] = max_activations_temp.max(dim=0).values.save()
 
         logits_clean_BLV = model.unembed.output.save()
 

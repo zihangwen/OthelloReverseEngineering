@@ -28,8 +28,8 @@ def neuron_intervention(
     game_batch_BL: t.Tensor,
     ablation_method: str = "zero",
 ):
-    # allowed_methods = ["mean", "zero", "max"]
-    allowed_methods = ["zero"]
+    allowed_methods = ["mean", "max", "zero"]
+    # allowed_methods = ["zero"]
     assert ablation_method in allowed_methods, (
         f"Invalid ablation method. Must be one of {allowed_methods}"
     )
@@ -39,22 +39,27 @@ def neuron_intervention(
 
     # Get clean logits and mean submodule activations
     with t.no_grad(), model.trace(game_batch_BL, **tracer_kwargs):
-        # for layer in layers:
-        #     original_input_BLD = model.blocks[layer].mlp.hook_post.output
-        #     mean_activations[layer] = original_input_BLD.mean(dim=(0, 1)).save()
-        #     max_activations = original_input_BLD.max(dim=0).values
-        #     max_activations[layer] = max_activations.max(dim=0).values.save()
+        for layer in range(model.cfg.n_layers):
+            original_input_BLD = model.blocks[layer].mlp.hook_post.output
+            if ablation_method == "mean":
+                mean_activations[layer] = original_input_BLD.mean(dim=(0, 1)).save()
+            elif ablation_method == "max":
+                # max_activations_temp = original_input_BLD.max(dim=0).values
+                max_activations[layer] = original_input_BLD.max(dim=(0, 1)).values.save()
+            elif ablation_method == "zero":
+                # No need to do anything for zero ablation, just save the original input
+                pass
         logits_clean_BLV = model.unembed.output.save()
     
     with t.no_grad(), model.trace(game_batch_BL, **tracer_kwargs):
         for layer, neuron_indices in layers_neurons.items():
             original_input_BLD = model.blocks[layer].mlp.hook_post.output
-            if ablation_method == "zero":
-                original_input_BLD[:, :, neuron_indices] = 0.0
-            elif ablation_method == "mean":
-                raise NotImplementedError("Mean ablation not implemented yet.")
+            if ablation_method == "mean":
+                original_input_BLD[:, :, neuron_indices] = mean_activations[layer][neuron_indices]
             elif ablation_method == "max":
-                raise NotImplementedError("Max ablation not implemented yet.")
+                original_input_BLD[:, :, neuron_indices] = max_activations[layer][neuron_indices]
+            elif ablation_method == "zero":
+                original_input_BLD[:, :, neuron_indices] = 0.0
         
         logits_patch_BLV = model.unembed.output.save()
     
