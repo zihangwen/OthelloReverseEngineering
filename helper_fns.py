@@ -44,6 +44,27 @@ def get_neuron_decision_tree(data: dict, layer: int, neuron_idx: int, function_n
     return neuron_tree, neuron_r2
 
 # %%
+def get_neuron_binary_decision_tree(data: dict, layer: int, neuron_idx: int, function_name: str):
+    """Extract the decision tree for a specific neuron."""
+    if layer not in data:
+        raise ValueError(f"Layer {layer} not found in data. Available layers: {list(data.keys())}")
+    
+    if function_name not in data[layer]:
+        available_funcs = list(data[layer].keys())
+        raise ValueError(f"Function {function_name} not found. Available: {available_funcs}")
+    
+    multi_output_model = data[layer][function_name]['binary_decision_tree']['model']
+    
+    if neuron_idx >= len(multi_output_model.estimators_):
+        raise ValueError(f"Neuron {neuron_idx} not found. Max neuron index: {len(multi_output_model.estimators_) - 1}")
+    
+    neuron_tree = multi_output_model.estimators_[neuron_idx]
+    f1_scores = data[layer][function_name]['binary_decision_tree']['f1']
+    neuron_f1 = f1_scores[neuron_idx]
+    
+    return neuron_tree, neuron_f1
+
+# %%
 # def visualize_decision_tree(tree_model, neuron_idx: int, layer: int, r2_score: float,
 #                           feature_names: List[str], max_depth: Optional[int] = None,
 #                           save_path: Optional[str] = None):

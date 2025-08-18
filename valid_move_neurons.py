@@ -30,6 +30,7 @@ from helper_fns import (
     calculate_neuron_output_weights,
     create_feature_names,
     get_neuron_decision_tree,
+    get_neuron_binary_decision_tree,
     # visualize_decision_tree,
 )
 # from simulate_activations_with_dts import (
@@ -41,12 +42,9 @@ device = "cuda" if t.cuda.is_available() else "cpu"
 t.set_grad_enabled(False)
 
 print(f"Using device: {device}")
-
 # %%
 model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
 model = utils.get_model(model_name, device)
-
-
 # %% Load the test dataset and process
 test_size = 500
 custom_functions = [
@@ -66,7 +64,6 @@ board_seqs_square = t.tensor(test_data["decoded_inputs"]).long().to(device)
 
 board_states, legal_moves, legal_moves_annotation = get_board_states_and_legal_moves(board_seqs_square)
 legal_moves = legal_moves.to(device=device, dtype=t.float32)
-
 # %% writing neuron
 n_layers = model.cfg.n_layers
 n_neurons = model.cfg.d_mlp
@@ -407,4 +404,35 @@ for i_k, (layer, neuron) in topk_neurons_seperate.items():
     # print(f"Saved visualization to {save_path}")
     # plt.show()
 
+# %% ----- ----- ----- ----- ----- ----- binary decision trees ----- ----- ----- ----- ----- ----- %% #
+binary_dt_name = 'neuron_simulation/decision_trees_binary/decision_trees_mlp_neuron_6000.pkl'
+with open(binary_dt_name, "rb") as f:
+    binary_decision_trees = pickle.load(f)
+
+binary_function_name = list(binary_decision_trees[0].keys())[0]
+n_binary_features = binary_decision_trees[0][binary_function_name]["binary_decision_tree"]["model"].n_features_in_
+binary_feature_names = create_feature_names(n_binary_features, binary_function_name)
+
+# %%
+max_depth = 3
+for i_k, (layer, neuron) in topk_neurons_seperate.items():
+    if i_k >= 16:
+        break
+    tree_model, f1_score = get_neuron_binary_decision_tree(binary_decision_trees, layer, neuron, binary_function_name)
+    fig, ax = plt.subplots(figsize=(20, 12))
+
+    plot_tree(
+        tree_model,
+        feature_names=binary_feature_names,
+        filled=True,
+        rounded=True,
+        fontsize=8,
+        max_depth=max_depth
+    )
+    
+    ax.set_title(f"Decision Tree (Rank {i_k}: L{layer}N{neuron})\nF1 Score: {f1_score:.4f}", 
+              fontsize=16, pad=20)
+    fig.savefig(f"figures/decision_tree_binary/dt_layer_rank_{i_k}_L{layer}N{neuron}.png", dpi=300, bbox_inches='tight')
+    # print(f"Saved visualization to {save_path}")
+    # plt.show()
 # %%

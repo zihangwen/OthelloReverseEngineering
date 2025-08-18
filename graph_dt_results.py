@@ -279,11 +279,11 @@ def extract_ablation_results(
 #     plt.xticks(range(len(all_layers)), layer_labels, rotation=45, ha="right")
 
 #     plt.tight_layout()
-#     plt.savefig(f"neuron_simulation/images/{sae_metric}_{group_by}_{test_size}.png")
+#     plt.savefig(f"figures/images/{sae_metric}_{group_by}_{test_size}.png")
 #     plt.show()
 
 # # %%
-# directory = "neuron_simulation/decision_trees_bs_eval"
+# directory = "figures/decision_trees_bs_eval"
 # # Updated custom function names to match what you trained with
 # custom_function_names = [
 #     othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC.__name__,
@@ -587,7 +587,7 @@ def plot_dataset_size_comparison(metric: str, test_size: int, group_by: str = "d
     
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(f"neuron_simulation/images/{metric}_dataset_size_comparison_mean.png", dpi=300, bbox_inches='tight')
+    plt.savefig(f"figures/images/{metric}_dataset_size_comparison_mean.png", dpi=300, bbox_inches='tight')
     plt.show()
 
 
@@ -632,7 +632,7 @@ def plot_dataset_size_comparison_r2_neurons(
     plt.grid(True, alpha=0.3)
     plt.savefig(
         (
-            f"neuron_simulation/images/r2_diff_"
+            f"figures/images/r2_diff_"
             f"{dt_file_list[indices[0]].split("_")[-1].split(".")[0]}_"
             f"{dt_file_list[indices[1]].split("_")[-1].split(".")[0]}.png"
         ),
@@ -712,13 +712,13 @@ def plot_different_r2_threshold(test_size: int, group_by: str = "decision_tree_f
     
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(f"neuron_simulation/images/dt_6000/r2_threshold_comparison.png", dpi=300, bbox_inches='tight')
+    plt.savefig(f"figures/images/dt_6000/r2_threshold_comparison.png", dpi=300, bbox_inches='tight')
     plt.show()
 
 
 # %%
 # Create overlay plots comparing different dataset sizes (60, 600, 6000)
-directory = "neuron_simulation/decision_trees_bs_eval"
+directory = "figures/decision_trees_bs_eval"
 # Updated custom function names to match what you trained with
 custom_function_names = [
     othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC.__name__,
