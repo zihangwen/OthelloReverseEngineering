@@ -38,7 +38,7 @@ These tensors serve as inputs for training the decision trees. We have various c
 `games_batch_to_input_tokens_flipped_bs_classifier_input_BLC`: Which moves have been played, which squares were flipped by the most recent move, and the board state.
 Many others.
 
-## Training Process
+<!-- ## Training Process
 
 The training process is relatively lightweight:
 - Typically requires only ~60 games for good decision tree performance
@@ -120,4 +120,4 @@ boards_TFBLRRC = einops.repeat(
 
 **Tests**
 
-Run `pytest -s` from the root directory to run all tests. This will take a couple minutes, and `-s` is helpful to gauge progress.
+Run `pytest -s` from the root directory to run all tests. This will take a couple minutes, and `-s` is helpful to gauge progress. -->
