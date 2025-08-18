@@ -33,7 +33,7 @@ device = "cpu"
 # sim_activations.run_simulations(default_config)
 
 # %%
-SAE_METRICS = ["f1"]
+SAE_METRICS = ["f1", "accuracy", "precision", "recall"]
 GROUP_BY_OPTIONS = ["input_location", "custom_function", "decision_tree_file"]
 
 label_lookup = {
@@ -88,12 +88,12 @@ def load_results_pickle_files(directory: str, test_size: int) -> List[Dict[str, 
             data.append(single_data)
     return data
 
-def calculate_good_features(results: Dict[str, Any], threshold: float) -> Tuple[int, int]:
-    # dt_r2 = torch.tensor(results["decision_tree"]["r2"])
+def calculate_good_features(results: Dict[str, Any], metric: str, threshold: float) -> Tuple[int, int]:
+    # dt_r2 = torch.tensor(results["decision_tree"][metric])
     # good_dt_r2 = (dt_r2 > threshold).sum()
     good_dt_r2 = -1
 
-    f1 = torch.tensor(results["binary_decision_tree"]["f1"])
+    f1 = torch.tensor(results["binary_decision_tree"][metric])
     good_f1 = (f1 > threshold).sum().item()
     # good_f1 = -1
 
@@ -184,12 +184,70 @@ def extract_ablation_results(
                 if desired_layer_tuples is not None and layer_tuple not in desired_layer_tuples:
                     continue
                 if custom_function_name in func_results:
-                    if desired_metric == "r2":
-                        good_dt_r2, _ = calculate_good_features(func_results[custom_function_name], threshold)
-                        result = good_dt_r2
-                    elif desired_metric == "f1":
-                        _, good_f1 = calculate_good_features(func_results[custom_function_name], threshold)
+                    if desired_metric in ["f1", "accuracy", "precision", "recall", "r2"]:
+                        _, good_f1 = calculate_good_features(
+                            func_results[custom_function_name], desired_metric, threshold
+                        )
                         result = good_f1
+                    else:
+                        result = func_results[custom_function_name][desired_metric]
+
+                    nested_results[primary_key][trainer_id][layer_tuple] = result
+
+    return nested_results
+
+def extract_ablation_results_mean(
+    data: List[Dict],
+    custom_function_names: list[str],
+    desired_metric: str,
+    group_by: str,
+    input_location_filter: Optional[str] = None,
+    func_name_filter: Optional[str] = None,
+    desired_layer_tuples: Optional[List[Tuple[int]]] = None,
+    # threshold: float = 0.7,
+) -> Dict:
+    if desired_metric not in SAE_METRICS:
+        raise ValueError(f"desired_metric must be one of {SAE_METRICS}")
+
+    if group_by not in GROUP_BY_OPTIONS:
+        raise ValueError(f"group_by must be one of {GROUP_BY_OPTIONS}")
+    
+    if func_name_filter is not None and func_name_filter not in custom_function_names:
+        raise ValueError(f"func_name_filter must be one of {custom_function_names}")
+
+    nested_results = {}
+    for run in data:
+        hyperparams = run["hyperparameters"]
+        input_location = hyperparams["input_location"]
+        trainer_id = hyperparams["trainer_id"]
+
+        if input_location_filter is not None and input_location != input_location_filter:
+            continue
+
+        for custom_function_name in custom_function_names:
+
+            if func_name_filter is not None and custom_function_name != func_name_filter:
+                continue
+            
+            if group_by == "input_location":
+                primary_key = input_location
+            elif group_by == "custom_function":
+                primary_key = custom_function_name
+            elif group_by == "decision_tree_file":
+                primary_key = os.path.basename(hyperparams["decision_tree_file"])
+
+            if primary_key not in nested_results:
+                nested_results[primary_key] = {}
+            if trainer_id not in nested_results[primary_key]:
+                nested_results[primary_key][trainer_id] = {}
+
+            for layer_tuple, func_results in run["results"].items():
+                if desired_layer_tuples is not None and layer_tuple not in desired_layer_tuples:
+                    continue
+                if custom_function_name in func_results:
+                    if desired_metric in ["f1", "accuracy", "precision", "recall", "r2"]:
+                        score = torch.tensor(func_results[custom_function_name]["binary_decision_tree"][desired_metric])
+                        result = score.mean().item()
                     else:
                         result = func_results[custom_function_name][desired_metric]
 
@@ -207,21 +265,18 @@ def plot_dataset_size_comparison_binary(metric: str, test_size: int, group_by: s
     markers = ['o', 's', '^', 'D', 'v']
     
     print("Loading data files...")
-    if metric == "f1":
-        results_data = load_results_pickle_files(directory, test_size)
-        print(f"Loaded {len(results_data)} results files")
-            
-        metric_per_layers = extract_ablation_results(
-            results_data,
-            custom_function_names,
-            metric,
-            group_by,
-            input_location_filter=None,
-            func_name_filter=None,
-            desired_layer_tuples=list(range(8)),
-        )
-    else:
-        raise ValueError(f"Unsupported metric for binary decision trees: {metric}")
+    results_data = load_results_pickle_files(directory, test_size)
+    print(f"Loaded {len(results_data)} results files")
+        
+    metric_per_layers = extract_ablation_results(
+        results_data,
+        custom_function_names,
+        metric,
+        group_by,
+        input_location_filter=None,
+        func_name_filter=None,
+        desired_layer_tuples=list(range(8)),
+    )
 
     metric_per_layers = dict(sorted(metric_per_layers.items(), key=lambda key: key))
     print("Metric keys:", list(metric_per_layers.keys()))
@@ -251,9 +306,8 @@ def plot_dataset_size_comparison_binary(metric: str, test_size: int, group_by: s
             )
 
     # Set up the plot
-    if metric == "f1":
-        title = "Decision Tree Interpretable Neuron Count Comparison Across Dataset Sizes\n(Evaluated on 500-game test set, higher is better)"
-        y_label = "Number of Neurons with F1 > 0.7"
+    title = "Decision Tree Interpretable Neuron Count Comparison Across Dataset Sizes\n(Evaluated on 500-game test set, higher is better)"
+    y_label = f"Number of Neurons with {metric} > 0.7"
     
     plt.xlabel("Layer")
     plt.ylabel(y_label)
@@ -395,6 +449,67 @@ def plot_different_f1_threshold(test_size: int, group_by: str = "decision_tree_f
     plt.show()
 
 
+def plot_different_metrics(test_size: int, group_by: str = "decision_tree_file", df_select: str = "decision_trees_mlp_neuron_6000.pkl", metrics_list: list[float] = ["f1", "accuracy", "precision", "recall"]):
+    """Plot overlays comparing the same metric across different dataset sizes"""
+    
+    plt.figure(figsize=(12, 8))
+    
+    colors = ['blue', 'red', 'green', 'orange', 'purple']
+    markers = ['o', 's', '^', 'D', 'v']
+    
+    results_data = load_results_pickle_files(directory, test_size)
+    print(f"Loaded {len(results_data)} results files")
+
+    metric_per_layers_dict = {}
+    print("Loading data files...")
+    for metric in metrics_list:
+        metric_per_layers = extract_ablation_results_mean(
+            results_data,
+            custom_function_names,
+            metric,
+            group_by,
+            input_location_filter=None,
+            func_name_filter=None,
+            desired_layer_tuples=list(range(8)),
+        )
+        metric_per_layers_dict[metric] = metric_per_layers
+
+    all_layers = set()
+    for _, trainer_ids in metric_per_layers.items():
+        for _, layer_results in trainer_ids.items():
+            all_layers.update(layer_results.keys())
+    
+    all_layers = sorted(all_layers)
+    for metric, metric_per_layers in metric_per_layers_dict.items():
+        print(metric_per_layers[df_select])
+        for i, (_, layer_results) in enumerate(metric_per_layers[df_select].items()):
+            values = [layer_results.get(layer, np.nan) for layer in all_layers]
+            # full_label = f"{display_label} ({ds_size} training games)"
+            plt.plot(
+                range(len(all_layers)),
+                values,
+                marker=markers[i % len(markers)],
+                # color=colors[i % len(colors)],
+                linestyle='-',
+                linewidth=2,
+                markersize=6,
+                label=f"{metric}",
+            )
+    
+    plt.xlabel("Layer")
+    plt.ylabel("Mean Value")
+    plt.title("Binary Decision Tree Metrics\n(Evaluated on 500-game test set)")
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+    if all_layers:
+        layer_labels = [str(layer) for layer in all_layers]
+        plt.xticks(range(len(all_layers)), layer_labels)
+    
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(f"figures/images/dt_6000/metrics_comparison.png", dpi=300, bbox_inches='tight')
+    plt.show()
+
 # %%
 # Create overlay plots comparing different dataset sizes (60, 600, 6000)
 directory = "neuron_simulation/decision_trees_binary_eval"
@@ -422,17 +537,20 @@ group_by = "decision_tree_file"
 # Create overlay plots for all three metrics
 # dataset_sizes = [60, 600, 6000]  # Add/remove dataset sizes as needed
 test_size = 500  # Fixed test size for comparison
-metrics_to_compare = ["f1"]
+metrics_to_compare = ["f1", "accuracy", "precision", "recall"]
 
-# ----- ----- ----- ----- ----- dataset size comparison plots ----- ----- ----- ----- ----- #
-print("Creating dataset size comparison plots...")
-for metric in metrics_to_compare:
-    print(f"\n=== Creating {metric.upper()} comparison plot ===")
-    plot_dataset_size_comparison_binary(metric, test_size, group_by)
+# %% ----- ----- ----- ----- ----- dataset size comparison plots ----- ----- ----- ----- ----- %% #
+# print("Creating dataset size comparison plots...")
+# for metric in metrics_to_compare:
+#     print(f"\n=== Creating {metric.upper()} comparison plot ===")
+#     plot_dataset_size_comparison_binary(metric, test_size, group_by)
 
-print("\nAll comparison plots created successfully!")
+# print("\nAll comparison plots created successfully!")
 
-# ----- ----- ----- ----- ----- r2 per neuron ----- ----- ----- ----- ----- #
+# %% ----- ----- ----- ----- ----- metric comparison plots ----- ----- ----- ----- ----- %% #
+plot_different_metrics(test_size, group_by, df_select = "decision_trees_mlp_neuron_6000.pkl", metrics_list = metrics_to_compare)
+
+# %% ----- ----- ----- ----- ----- r2 per neuron ----- ----- ----- ----- ----- %% #
 # r2_diff = plot_dataset_size_comparison_f1_neurons(
 #     layer=5,
 #     test_size=test_size,
@@ -453,7 +571,7 @@ print("\nAll comparison plots created successfully!")
 # print("negative neuron indexs:", *r2_diff_negative_indices)
 # print("negative neuron scores:", *r2_diff_negative_scores)
 
-# ----- ----- ----- ----- ----- f1 with different threshold ----- ----- ----- ----- ----- #
+# %% ----- ----- ----- ----- ----- f1 with different threshold ----- ----- ----- ----- ----- %% #
 plot_different_f1_threshold(test_size, group_by, df_select = "decision_trees_mlp_neuron_6000.pkl", f1_threshold_list=[0.5, 0.7, 0.9])
 
 # %%
