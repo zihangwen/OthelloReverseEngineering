@@ -607,8 +607,8 @@ def process_layer_simple(
     binary_acts_layer,
     max_depth: int,
     binary_dt: bool,
+    regular_dt: bool,
     linear_reg: bool = False,
-    regular_dt: bool = True,
     random_seed: int = 42,
 ) -> dict:
     print(f"\nLayer {layer}")
@@ -787,6 +787,7 @@ def compute_predictors(
     max_depth: int,
     output_location: str,
     binary_dt: bool,
+    regular_dt: bool,
 ) -> dict:
     output_filename = (
         f"{output_location}decision_trees/decision_trees_{input_location}_{dataset_size}.pkl"
@@ -823,6 +824,7 @@ def compute_predictors(
                 binary_acts[layer],
                 max_depth,
                 binary_dt,
+                regular_dt,
             )
             for layer in layers
         )
@@ -1240,6 +1242,7 @@ def run_simulations(config: sim_config.SimulationConfig):
                         max_depth=config.max_depth,
                         output_location=config.output_location,
                         binary_dt=config.binary_dt,
+                        regular_dt=config.regular_dt,
                     )
                 else:  # Adds neuron activations as input features to decision trees for downstream layers
                     decision_trees = compute_predictors_iterative(
@@ -1297,6 +1300,9 @@ def run_simulations(config: sim_config.SimulationConfig):
             for combo in true_false_combinations:
                 ablate_not_selected, add_error = combo
 
+                if not config.regular_dt:
+                    continue
+
                 ablations = perform_interventions(
                     decision_trees=decision_trees,
                     input_location=input_location,
@@ -1344,10 +1350,12 @@ if __name__ == "__main__":
         sim_config.MLP_dt_config,
         sim_config.MLP_mean_config,
     ]
+    default_config.binary_dt = True  # changed by zihangw
+    default_config.regular_dt = False  # changed by zihangw
 
     # example config change
     # 6 batches seems to work reasonably well for training decision trees
     default_config.n_batches = 6
-    default_config.batch_size = 10
+    default_config.batch_size = 1000
     run_simulations(default_config)
     print(f"--- {time.time() - start_time} seconds ---")
