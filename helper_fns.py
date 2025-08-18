@@ -10,7 +10,8 @@ from torch import Tensor
 from IPython.display import HTML, display
 from jaxtyping import Bool, Float, Int
 from typing import Optional, List
-
+# import matplotlib.pyplot as plt
+# from sklearn.tree import plot_tree
 import arena_utils as arena_utils
 from simulate_activations_with_dts import (
     compute_kl_divergence,
@@ -20,6 +21,52 @@ from simulate_activations_with_dts import (
 MIDDLE_SQUARES = [27, 28, 35, 36]
 ALL_SQUARES = [i for i in range(64) if i not in MIDDLE_SQUARES]
 tracer_kwargs = {"validate": True, "scan": True}
+
+# %%
+def get_neuron_decision_tree(data: dict, layer: int, neuron_idx: int, function_name: str):
+    """Extract the decision tree for a specific neuron."""
+    if layer not in data:
+        raise ValueError(f"Layer {layer} not found in data. Available layers: {list(data.keys())}")
+    
+    if function_name not in data[layer]:
+        available_funcs = list(data[layer].keys())
+        raise ValueError(f"Function {function_name} not found. Available: {available_funcs}")
+    
+    multi_output_model = data[layer][function_name]['decision_tree']['model']
+    
+    if neuron_idx >= len(multi_output_model.estimators_):
+        raise ValueError(f"Neuron {neuron_idx} not found. Max neuron index: {len(multi_output_model.estimators_) - 1}")
+    
+    neuron_tree = multi_output_model.estimators_[neuron_idx]
+    r2_scores = data[layer][function_name]['decision_tree']['r2']
+    neuron_r2 = r2_scores[neuron_idx]
+    
+    return neuron_tree, neuron_r2
+
+# %%
+# def visualize_decision_tree(tree_model, neuron_idx: int, layer: int, r2_score: float,
+#                           feature_names: List[str], max_depth: Optional[int] = None,
+#                           save_path: Optional[str] = None):
+#     """Visualize a decision tree for a specific neuron."""
+#     plt.figure(figsize=(20, 12))
+    
+#     plot_tree(
+#         tree_model,
+#         feature_names=feature_names,
+#         filled=True,
+#         rounded=True,
+#         fontsize=8,
+#         max_depth=max_depth
+#     )
+    
+#     plt.title(f"Decision Tree for Layer {layer}, Neuron {neuron_idx}\nR² Score: {r2_score:.4f}", 
+#               fontsize=16, pad=20)
+    
+#     if save_path:
+#         plt.savefig(f"{save_path}/dt_layer_{layer}_neuron_{neuron_idx}.png", dpi=300, bbox_inches='tight')
+#         print(f"Saved visualization to {save_path}")
+    
+#     plt.show()
 
 # %%
 def neuron_intervention(

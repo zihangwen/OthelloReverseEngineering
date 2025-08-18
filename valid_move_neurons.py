@@ -6,17 +6,17 @@ import numpy as np
 import einops
 # from sklearn.tree import plot_tree
 import matplotlib.pyplot as plt
+from sklearn.tree import plot_tree
+from transformer_lens.utils import to_numpy, get_act_name
+# from transformer_lens import ActivationCache, HookedTransformer
+# from torch import Tensor
+# from IPython.display import HTML, display
+# from jaxtyping import Bool, Float, Int
 
 import circuits.utils as utils
 import circuits.othello_utils as othello_utils
 from circuits.eval_sae_as_classifier import construct_othello_dataset
-# from transformer_lens import ActivationCache, HookedTransformer
-from transformer_lens.utils import to_numpy, get_act_name
-# from torch import Tensor
-# from IPython.display import HTML, display
-# from jaxtyping import Bool, Float, Int
 import arena_utils as arena_utils
-
 from helper_fns import (
     # MIDDLE_SQUARES,
     ALL_SQUARES,
@@ -28,7 +28,9 @@ from helper_fns import (
     # get_w_out,
     calculate_neuron_input_weights,
     calculate_neuron_output_weights,
-    # create_feature_names,
+    create_feature_names,
+    get_neuron_decision_tree,
+    # visualize_decision_tree,
 )
 # from simulate_activations_with_dts import (
 #     compute_kl_divergence,
@@ -48,8 +50,9 @@ model = utils.get_model(model_name, device)
 # %% Load the test dataset and process
 test_size = 500
 custom_functions = [
-    othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC,
+    # othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC,
     # othello_utils.games_batch_to_input_tokens_flipped_pbs_classifier_input_BLC,
+    othello_utils.games_batch_to_valid_moves_BLRRC, # (legal move)
 ]
 test_data = construct_othello_dataset(
     custom_functions=custom_functions,
@@ -83,6 +86,7 @@ write_attribution_square = t.zeros((n_layers, n_neurons, 8, 8), device=device, d
 write_attribution_square.flatten(start_dim=-2, end_dim=-1)[..., ALL_SQUARES] = write_attribution
 
 # %% ----- ----- ----- ----- ----- ----- specific square ----- ----- ----- ----- ----- ----- %% #
+# Calculate neuron attribution for a specific square
 square_idx = 25
 token_id = arena_utils.SQUARE_TO_ID[square_idx]
 print(f"Square {square_idx} ({arena_utils.to_board_label(square_idx)}), Token ID: {token_id}")
@@ -193,7 +197,7 @@ neuron_attribution = neuron_attribution.sum(dim=(0, 1))  # [layer, neuron]
 # fig.tight_layout()
 # fig.savefig(f"figures/topk_patch_accuracy_layer_level_square{square_idx}_token{token_id}.png", dpi=600)
 
-# %% ablation with topk neurons across layers
+# %% topk neurons across layers
 topk_list = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
 ablation_method="mean"
 
@@ -219,6 +223,7 @@ for topk in topk_list:
     randk_temp = sorted(randk_neurons[topk].items(), key=lambda kv: kv[0])
     randk_neurons[topk] = defaultdict(list, randk_temp)
 
+# %% ablation experiments
 topk_scores = defaultdict(dict)
 randk_scores = defaultdict(dict)
 for topk in topk_list:
@@ -273,16 +278,24 @@ axes[1].set_xscale("log", base=2)
 axes[1].legend()
 fig.suptitle(f"Square {square_idx} ({arena_utils.to_board_label(square_idx)}), Token ID: {token_id}")
 fig.tight_layout()
-# fig.savefig(f"figures/topk_cross_layer_square{square_idx}_token{token_id}.png", dpi=600)
+fig.savefig(f"figures/topk_cross_layer_square{square_idx}_token{token_id}_mean_ablation.png", dpi=600)
 
-# %% ----- ----- ----- ----- ----- ----- probe directions ----- ----- ----- ----- ----- ----- %% #
-# print topk neurons for specific square (cross-layer)
+# %% print topk neurons for specific square (cross-layer)
 topk = 32
 print(f"Top {topk} neurons for square {square_idx} ({arena_utils.to_board_label(square_idx)}), token ID {token_id}:")
 for layer, neurons in topk_neurons[topk].items():
     print(f"Layer {layer}: Neurons {neurons}")
 
-# %% Load probes (probe directions (Mine, Empty, Yours))
+# %% ----- ----- ----- ----- ----- ----- topk neurons (layer-neuron pairs) ----- ----- ----- ----- ----- ----- %% #
+topk_neurons_seperate = defaultdict(list)
+topk_neuron_idx = t.topk(neuron_attribution.flatten(), k=2048).indices
+for i_k, idx in enumerate(topk_neuron_idx):
+    layer = idx // n_neurons
+    neuron = idx % n_neurons
+    topk_neurons_seperate[i_k] = [layer.item(), neuron.item()]
+
+# %% ----- ----- ----- ----- ----- ----- probe directions ----- ----- ----- ----- ----- ----- %% #
+# Load probes (probe directions (Mine, Empty, Yours))
 probe_dict = {i : t.load(
     f"linear_probes/Othello-GPT-Transformer-Lens_othello_mine_yours_probe_layer_{i}.pth", map_location=str(device), weights_only="True"
 )['linear_probe'].squeeze() for i in range(model.cfg.n_layers)}
@@ -333,14 +346,6 @@ blank_probe_normalized[..., [3, 3, 4, 4], [3, 4, 3, 4]] = 0.0
 # blank_probe_normalized[:, [3, 3, 4, 4], [3, 4, 3, 4]] = 0.0
 
 # %%
-topk_neurons_seperate = defaultdict(list)
-topk_neuron_idx = t.topk(neuron_attribution.flatten(), k=2048).indices
-for i_k, idx in enumerate(topk_neuron_idx):
-    layer = idx // n_neurons
-    neuron = idx % n_neurons
-    topk_neurons_seperate[i_k] = [layer.item(), neuron.item()]
-
-# %%
 w_in_accu_blank = 0
 w_in_accu_my = 0
 for i_k, (layer, neuron) in topk_neurons_seperate.items():
@@ -368,5 +373,38 @@ for i_k, (layer, neuron) in topk_neurons_seperate.items():
         height=380*2,
     )
     fig.write_image(f"figures/probe/neuron_input_weights_rank_{i_k}_L{layer}N{neuron}.png")
+
+# %% ----- ----- ----- ----- ----- ----- decision trees ----- ----- ----- ----- ----- ----- %% #
+# Load decision trees
+dt_name = 'neuron_simulation/decision_trees_bs/decision_trees_mlp_neuron_6000.pkl'
+with open(dt_name, "rb") as f:
+    decision_trees = pickle.load(f)
+
+function_name = list(decision_trees[0].keys())[0]
+n_features = decision_trees[0][function_name]["decision_tree"]["model"].n_features_in_
+feature_names = create_feature_names(n_features, function_name)
+
+# %%
+max_depth = 3
+for i_k, (layer, neuron) in topk_neurons_seperate.items():
+    if i_k >= 16:
+        break
+    tree_model, r2_score = get_neuron_decision_tree(decision_trees, layer, neuron, function_name)
+    fig, ax = plt.subplots(figsize=(20, 12))
+
+    plot_tree(
+        tree_model,
+        feature_names=feature_names,
+        filled=True,
+        rounded=True,
+        fontsize=8,
+        max_depth=max_depth
+    )
+    
+    ax.set_title(f"Decision Tree (Rank {i_k}: L{layer}N{neuron})\nR² Score: {r2_score:.4f}", 
+              fontsize=16, pad=20)
+    fig.savefig(f"figures/decision_tree/dt_layer_rank_{i_k}_L{layer}N{neuron}.png", dpi=300, bbox_inches='tight')
+    # print(f"Saved visualization to {save_path}")
+    # plt.show()
 
 # %%
