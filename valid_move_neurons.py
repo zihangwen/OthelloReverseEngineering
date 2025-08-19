@@ -4,6 +4,11 @@ from collections import defaultdict
 import torch as t
 import numpy as np
 import einops
+from rich import print as rprint
+from rich.table import Column, Table
+from rich.console import Console
+from rich.terminal_theme import MONOKAI
+
 # from sklearn.tree import plot_tree
 import matplotlib.pyplot as plt
 from sklearn.tree import plot_tree
@@ -19,6 +24,7 @@ from circuits.eval_sae_as_classifier import construct_othello_dataset
 import arena_utils as arena_utils
 from helper_fns import (
     # MIDDLE_SQUARES,
+    neuron_intervention,
     ALL_SQUARES,
     get_board_states_and_legal_moves,
     calculate_ablation_scores_game_move,
@@ -196,7 +202,6 @@ neuron_attribution = neuron_attribution.sum(dim=(0, 1))  # [layer, neuron]
 
 # %% topk neurons across layers
 topk_list = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
-ablation_method="mean"
 
 topk_neurons = defaultdict(lambda: defaultdict(list))
 randk_neurons = defaultdict(lambda: defaultdict(list))
@@ -220,7 +225,58 @@ for topk in topk_list:
     randk_temp = sorted(randk_neurons[topk].items(), key=lambda kv: kv[0])
     randk_neurons[topk] = defaultdict(list, randk_temp)
 
+# %% ----- ----- ----- ----- ----- distribution of logits (table) ----- ----- ----- ----- ----- %% #
+# logits_clean_BLV, logits_patch_BLV = neuron_intervention(
+#     model,
+#     layers_neurons=topk_neurons[32],
+#     game_batch_BL=board_seqs_id.to(device),
+#     ablation_method="zero",
+# )
+
+# descending_clean_order = t.argsort(logits_clean_BLV, dim=-1, descending=True)
+# descending_patch_order = t.argsort(logits_patch_BLV, dim=-1, descending=True)
+
+# row_coord, cols_coord = t.where(valid_move_square_mask)
+# t.manual_seed(42)  # For reproducibility
+# rdm_idx = t.randint(int(valid_move_square_mask.sum().item()), (10,))
+# # game = 0
+# # seq = 4
+# for i_row, i_col in zip(row_coord[rdm_idx], cols_coord[rdm_idx]):
+#     game = i_row.item()
+#     seq = i_col.item()
+
+#     logits_clean_gs = logits_clean_BLV[game, seq]
+#     logits_patch_gs = logits_patch_BLV[game, seq]
+#     vm_num_gs = valid_move_number[game, seq]
+#     descending_clean_order_gs = descending_clean_order[game, seq]
+#     descending_patch_order_gs = descending_patch_order[game, seq]
+
+#     table = Table("rank", "clean logits", "square label", "patch logits", "square label", title=f"Logits for Game {game}, Seq {seq}, target square {arena_utils.to_board_label(square_idx)} (Valid Move Number: {vm_num_gs:.0f})")
+#     for i in range(int(vm_num_gs)+10):
+#         clean_token = descending_clean_order_gs[i].item()
+#         patch_token = descending_patch_order_gs[i].item()
+#         if clean_token == token_id:
+#             color_clean = "[green]"
+#         else:
+#             color_clean = ""
+#         if patch_token == token_id:
+#             color_patch = "[cyan]"
+#         else:
+#             color_patch = ""
+#         table.add_row(
+#             str(i+1),
+#             color_clean+f"{logits_clean_gs[clean_token]:.4f}",
+#             color_clean+arena_utils.to_board_label(arena_utils.ID_TO_SQUARE[clean_token]),
+#             color_patch+f"{logits_patch_gs[patch_token]:.4f}",
+#             color_patch+arena_utils.to_board_label(arena_utils.ID_TO_SQUARE[patch_token]),
+#         )
+#     console = Console(record=True)
+#     console.print(table)
+#     console.save_svg(f"figures/table/game{game}_seq{seq}_token{token_id}_patch.svg", theme=MONOKAI)
+
+
 # %% ablation experiments
+ablation_method="mean"
 topk_scores = defaultdict(dict)
 randk_scores = defaultdict(dict)
 for topk in topk_list:

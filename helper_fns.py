@@ -179,6 +179,10 @@ def calculate_ablation_scores_square(model, layers_neurons, board_seqs_id, valid
     patch_correct = ((logits_patch_rank_token < valid_move_number) * valid_move_square_mask).sum()
     patch_accuracy = patch_correct / patch_total
 
+    # logits_patch_order = t.argsort(logits_patch_BLV, dim=-1, descending=True)
+    # logits_patch_rank = t.argsort(logits_patch_order, dim=-1)
+    # logits_patch_rank_token = logits_patch_rank[..., token_id]  # [game, seq]
+
     return kl_div_BL.mean().item(), clean_accuracy.item(), patch_accuracy.item()
 
 # %%
