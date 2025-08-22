@@ -12,6 +12,9 @@ from rich.terminal_theme import MONOKAI
 # from sklearn.tree import plot_tree
 import matplotlib.pyplot as plt
 from sklearn.tree import plot_tree
+from sklearn.tree import export_graphviz
+import graphviz
+
 from transformer_lens.utils import to_numpy, get_act_name
 # from transformer_lens import ActivationCache, HookedTransformer
 # from torch import Tensor
@@ -337,7 +340,8 @@ for topk in topk_list:
     }
 
 # %%
-fig, ax = plt.subplots(1, 2, figsize=(15, 5))
+fig, ax = plt.subplots(1, 2, figsize=(16, 6))
+plt.rcParams['font.size'] = 12
 axes = ax.flatten()
 kl_list_topk = [layer_info["kl_div_BL"] for _, layer_info in topk_scores.items()]
 kl_list_randk = [layer_info["kl_div_BL"] for _, layer_info in randk_scores_analysis_score.items()]
@@ -350,10 +354,11 @@ axes[0].fill_between(
     np.array(kl_list_randk)+np.array(kl_list_rank_ci),
     alpha=0.2, color='gray', label="Random-k 95% CI"
 )
-axes[0].set_title("KL Divergence for Top-k and Random-k Neurons")
-axes[0].set_xlabel("Top-k Neurons")
-axes[0].set_ylabel("KL Divergence")
+axes[0].set_title("KL Divergence for Top-k and Random-k Neurons", fontsize=18)
+axes[0].set_xlabel("Number of Neurons", fontsize=16)
+axes[0].set_ylabel("KL Divergence", fontsize=16)
 axes[0].set_xscale("log", base=2)
+plt.xticks(fontsize=16)
 
 patch_acc_list_topk = [layer_info["patch_accuracy"] for _, layer_info in topk_scores.items()]
 patch_acc_list_randk = [layer_info["patch_accuracy"] for _, layer_info in randk_scores_analysis_score.items()]
@@ -366,12 +371,14 @@ axes[1].fill_between(
     np.array(patch_acc_list_randk)+np.array(patch_acc_list_rank_ci),
     alpha=0.2, color='gray', label="Random-k 95% CI"
 )
-axes[1].set_title("Patch Accuracy for Top-k and Random-k Neurons")
-axes[1].set_xlabel("Top-k Neurons")
-axes[1].set_ylabel("Patch Accuracy")
+axes[1].set_title("Patch Accuracy for Top-k and Random-k Neurons", fontsize=18)
+axes[1].set_xlabel("Number of Neurons", fontsize=16)
+axes[1].set_ylabel("Patch Accuracy", fontsize=16)
 axes[1].set_xscale("log", base=2)
 axes[1].legend()
-fig.suptitle(f"Square {square_idx} ({arena_utils.to_board_label(square_idx)}), Token ID: {token_id}")
+plt.xticks(fontsize=16)
+
+fig.suptitle(f"Square {square_idx} ({arena_utils.to_board_label(square_idx)}), Token ID: {token_id}", fontsize=20)
 fig.tight_layout()
 fig.savefig(f"figures/topk_cross_layer_square{square_idx}_token{token_id}_{ablation_method}_ablation_ci95.png", dpi=600)
 
@@ -495,24 +502,42 @@ feature_names = create_feature_names(n_features, function_name)
 
 # %%
 max_depth = 3
+import re
 for i_k, (layer, neuron) in topk_neurons_seperate.items():
     if i_k >= 16:
         break
     tree_model, r2_score = get_neuron_decision_tree(decision_trees, layer, neuron, function_name)
-    fig, ax = plt.subplots(figsize=(20, 12))
+    # fig, ax = plt.subplots(figsize=(20, 12))
 
-    plot_tree(
-        tree_model,
-        feature_names=feature_names,
-        filled=True,
-        rounded=True,
-        fontsize=8,
-        max_depth=max_depth
-    )
+    # plot_tree(
+    #     tree_model,
+    #     feature_names=feature_names,
+    #     filled=True,
+    #     rounded=True,
+    #     fontsize=8,
+    #     max_depth=max_depth
+    # )
     
-    ax.set_title(f"Decision Tree (Rank {i_k}: L{layer}N{neuron})\nR² Score: {r2_score:.4f}", 
-              fontsize=16, pad=20)
-    fig.savefig(f"figures/decision_tree/dt_layer_rank_{i_k}_L{layer}N{neuron}.png", dpi=300, bbox_inches='tight')
+    # ax.set_title(f"Decision Tree (Rank {i_k}: L{layer}N{neuron})\nR² Score: {r2_score:.4f}", 
+    #           fontsize=16, pad=20)
+    # fig.savefig(f"figures/decision_tree/dt_layer_rank_{i_k}_L{layer}N{neuron}.png", dpi=300, bbox_inches='tight')
+
+    dot_data = export_graphviz(
+        tree_model,
+        out_file=None,
+        feature_names=feature_names,
+        filled=True, rounded=True,
+        special_characters=True,
+        proportion=False,   # scale node size by samples
+        max_depth=3,
+        impurity=False,   # removes "mse" or "variance"
+    )
+    dot_data = re.sub(r'samples = \d+', '', dot_data)
+    graph = graphviz.Source(dot_data)
+    # graph.graph_attr.update(label=f"Decision Tree (Rank {i_k}: L{layer}N{neuron})\nR² Score: {r2_score:.4f}", labelloc='top', fontsize='16')
+    # graph.render("regression_tree")  # saves PDF/PNG
+    # graph
+    graph.render(f"figures/decision_tree/dt_layer_rank_{i_k}_L{layer}N{neuron}", format="png", cleanup=True)
     # print(f"Saved visualization to {save_path}")
     # plt.show()
 

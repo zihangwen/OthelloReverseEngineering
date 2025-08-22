@@ -9,6 +9,9 @@ from rich.table import Column, Table
 from rich.console import Console
 from rich.terminal_theme import MONOKAI
 
+from sklearn.tree import export_graphviz
+import graphviz
+
 # from sklearn.tree import plot_tree
 import matplotlib.pyplot as plt
 from sklearn.tree import plot_tree
@@ -87,6 +90,96 @@ plot_tree(
 )
 
 ax.set_title(f"Decision Tree (L{layer}N{neuron})\nR² Score: {r2_score:.4f}", fontsize=16, pad=20)
+
+# %%
+from sklearn.tree import DecisionTreeRegressor
+import graphviz
+
+def export_pruned_tree(tree, cutoff, feature_names=None):
+    """
+    Export a pruned decision tree to Graphviz DOT format, 
+    keeping only leaves with value >= cutoff and their ancestors.
+    
+    Parameters
+    ----------
+    tree : DecisionTreeRegressor
+        A fitted sklearn decision tree model.
+    cutoff : float
+        Minimum leaf prediction value to keep.
+    feature_names : list of str, optional
+        Names for features (default: f0, f1, ...).
+    
+    Returns
+    -------
+    dot : str
+        Graphviz DOT representation of the pruned tree.
+    """
+    tree_ = tree.tree_
+    n_nodes = tree_.node_count
+    
+    if feature_names is None:
+        feature_names = [f"f{i}" for i in range(tree_.n_features_out_)]
+    
+    # Build parent links
+    parent = [-1] * n_nodes
+    for i in range(n_nodes):
+        for child in [tree_.children_left[i], tree_.children_right[i]]:
+            if child != -1:
+                parent[child] = i
+    
+    # Decide which nodes to keep
+    keep = [False] * n_nodes
+    for i in range(n_nodes):
+        if tree_.children_left[i] == -1:  # leaf
+            if tree_.value[i, 0, 0] >= cutoff:
+                j = i
+                while j != -1 and not keep[j]:
+                    keep[j] = True
+                    j = parent[j]
+    
+    # Recursive function to emit DOT nodes/edges
+    lines = ["digraph Tree {", "node [shape=box, style=\"rounded\"] ;"]
+    
+    def recurse(node_id):
+        if not keep[node_id]:
+            return
+        if tree_.children_left[node_id] == -1:  # leaf
+            value = tree_.value[node_id, 0, 0]
+            lines.append(f'{node_id} [label="value={value:.3f}", shape=ellipse];')
+        else:
+            feat = feature_names[tree_.feature[node_id]]
+            thr = tree_.threshold[node_id]
+            lines.append(f'{node_id} [label="{feat} <= {thr:.2f}"];')
+            for child, edge_label in [
+                (tree_.children_left[node_id], "True"),
+                (tree_.children_right[node_id], "False"),
+            ]:
+                if keep[child]:
+                    recurse(child)
+                    lines.append(f"{node_id} -> {child} [labeldistance=2.5, labelangle=45, headlabel=\"{edge_label}\"];")
+    
+    recurse(0)  # start at root
+    lines.append("}")
+    return "\n".join(lines)
+
+# %%
+# dot = export_pruned_tree(tree_model, cutoff=1, feature_names=feature_names)
+# graph = graphviz.Source(dot)
+
+dot_data = export_graphviz(
+    tree_model,
+    out_file=None,
+    feature_names=feature_names,
+    filled=True, rounded=True,
+    special_characters=True,
+    proportion=True,   # scale node size by samples
+    max_depth=3,
+)
+graph = graphviz.Source(dot_data)
+
+graph.render("regression_tree")  # saves PDF/PNG
+graph
+graph.render("tree_3layers", format="png", cleanup=True)
 
 # %%
 binary_tree_model = binary_decision_trees[layer][function_name]['binary_decision_tree']['model'].estimators_[neuron]
