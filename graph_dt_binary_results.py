@@ -33,6 +33,14 @@ device = "cpu"
 # sim_activations.run_simulations(default_config)
 
 # %%
+METRICS_NAME_MAPPING = {
+    "f1": "F1 Score",
+    "accuracy": "Accuracy",
+    "precision": "Precision",
+    "recall": "Recall",
+    "r2": "R² Score",
+}
+
 SAE_METRICS = ["f1", "accuracy", "precision", "recall"]
 GROUP_BY_OPTIONS = ["input_location", "custom_function", "decision_tree_file"]
 
@@ -306,8 +314,8 @@ def plot_dataset_size_comparison_binary(metric: str, test_size: int, group_by: s
             )
 
     # Set up the plot
-    title = "Decision Tree Interpretable Neuron Count Comparison Across Dataset Sizes\n(Evaluated on 500-game test set, higher is better)"
-    y_label = f"Number of Neurons with {metric} > 0.7"
+    title = "Binary Decision Tree Interpretable Neuron Count Comparison Across Dataset Sizes\n(Evaluated on 500-game test set, higher is better)"
+    y_label = f"Number of Neurons with {METRICS_NAME_MAPPING[metric]} > 0.7"
     
     plt.xlabel("Layer")
     plt.ylabel(y_label)
@@ -436,7 +444,7 @@ def plot_different_f1_threshold(test_size: int, group_by: str = "decision_tree_f
     
     plt.xlabel("Layer")
     plt.ylabel("Number of Neurons")
-    plt.title("Decision Tree Interpretable Neuron Count Comparison Across F1 Thresholds\n(Evaluated on 500-game test set)")
+    plt.title("Binary Decision Tree Interpretable Neuron Count Comparison Across F1 Thresholds\n(Evaluated on 500-game test set)")
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     
     if all_layers:
@@ -493,7 +501,7 @@ def plot_different_metrics(test_size: int, group_by: str = "decision_tree_file",
                 linestyle='-',
                 linewidth=2,
                 markersize=6,
-                label=f"{metric}",
+                label=f"{METRICS_NAME_MAPPING[metric]}",
             )
     
     plt.xlabel("Layer")
@@ -540,12 +548,12 @@ test_size = 500  # Fixed test size for comparison
 metrics_to_compare = ["f1", "accuracy", "precision", "recall"]
 
 # %% ----- ----- ----- ----- ----- dataset size comparison plots ----- ----- ----- ----- ----- %% #
-# print("Creating dataset size comparison plots...")
-# for metric in metrics_to_compare:
-#     print(f"\n=== Creating {metric.upper()} comparison plot ===")
-#     plot_dataset_size_comparison_binary(metric, test_size, group_by)
+print("Creating dataset size comparison plots...")
+for metric in metrics_to_compare:
+    print(f"\n=== Creating {metric.upper()} comparison plot ===")
+    plot_dataset_size_comparison_binary(metric, test_size, group_by)
 
-# print("\nAll comparison plots created successfully!")
+print("\nAll comparison plots created successfully!")
 
 # %% ----- ----- ----- ----- ----- metric comparison plots ----- ----- ----- ----- ----- %% #
 plot_different_metrics(test_size, group_by, df_select = "decision_trees_mlp_neuron_6000.pkl", metrics_list = metrics_to_compare)
