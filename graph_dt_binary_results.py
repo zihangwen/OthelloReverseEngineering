@@ -317,15 +317,17 @@ def plot_dataset_size_comparison_binary(metric: str, test_size: int, group_by: s
     title = "Binary Decision Tree Interpretable Neuron Count Comparison Across Dataset Sizes\n(Evaluated on 500-game test set, higher is better)"
     y_label = f"Number of Neurons with {METRICS_NAME_MAPPING[metric]} > 0.7"
     
-    plt.xlabel("Layer")
-    plt.ylabel(y_label)
-    plt.title(title)
+    plt.xlabel("Layer", fontsize=18)
+    plt.ylabel(y_label, fontsize=18)
+    plt.title(title, fontsize=20)
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     
     if all_layers:
         layer_labels = [str(layer) for layer in all_layers]
         plt.xticks(range(len(all_layers)), layer_labels)
     
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(f"figures/images/{metric}_dataset_size_comparison_mean.png", dpi=300, bbox_inches='tight')

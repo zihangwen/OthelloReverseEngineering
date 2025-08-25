@@ -576,15 +576,17 @@ def plot_dataset_size_comparison(metric: str, test_size: int, group_by: str = "d
         title = "Decision Tree Interpretable Neuron Count Comparison Across Dataset Sizes\n(Evaluated on 500-game test set, higher is better)"
         y_label = "Number of Neurons with R² > 0.7"
     
-    plt.xlabel("Layer")
-    plt.ylabel(y_label)
-    plt.title(title)
+    plt.xlabel("Layer", fontsize=18)
+    plt.ylabel(y_label, fontsize=18)
+    plt.title(title, fontsize=20)
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     
     if all_layers:
         layer_labels = [str(layer) for layer in all_layers]
         plt.xticks(range(len(all_layers)), layer_labels)
     
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(f"figures/images/{metric}_dataset_size_comparison_mean.png", dpi=300, bbox_inches='tight')
@@ -625,10 +627,10 @@ def plot_dataset_size_comparison_r2_neurons(
     plt.plot(r2_diff)
     plt.axhline(0, color='gray', linestyle='--', linewidth=1)
 
-    plt.xlabel('Neuron')
-    plt.ylabel(f'R² differences')
+    plt.xlabel('Neuron', fontsize=18)
+    plt.ylabel(f'R² differences', fontsize=18)
     
-    plt.title(f'Per MLP neuron differences for Layer {layer}\nbetween {dt_file_list[indices[0]]} and {dt_file_list[indices[1]]}')
+    plt.title(f'Per MLP neuron differences for Layer {layer}\nbetween {dt_file_list[indices[0]]} and {dt_file_list[indices[1]]}', fontsize=20)
     plt.grid(True, alpha=0.3)
     plt.savefig(
         (
@@ -638,6 +640,8 @@ def plot_dataset_size_comparison_r2_neurons(
         ),
         dpi=300, bbox_inches='tight'
     )
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
     plt.show()
 
     return r2_diff
@@ -701,10 +705,12 @@ def plot_different_r2_threshold(test_size: int, group_by: str = "decision_tree_f
             )
 
     
-    plt.xlabel("Layer")
-    plt.ylabel("Number of Neurons")
-    plt.title("Decision Tree Interpretable Neuron Count Comparison Across R² Thresholds\n(Evaluated on 500-game test set)")
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.xlabel("Layer", fontsize=18)
+    plt.ylabel("Number of Neurons", fontsize=18)
+    plt.title("Decision Tree Interpretable Neuron Count Comparison Across R² Thresholds\n(Evaluated on 500-game test set)", fontsize=20)
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=18)
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
     
     if all_layers:
         layer_labels = [str(layer) for layer in all_layers]
@@ -718,7 +724,7 @@ def plot_different_r2_threshold(test_size: int, group_by: str = "decision_tree_f
 
 # %%
 # Create overlay plots comparing different dataset sizes (60, 600, 6000)
-directory = "figures/decision_trees_bs_eval"
+directory = "neuron_simulation/decision_trees_bs_eval"
 # Updated custom function names to match what you trained with
 custom_function_names = [
     othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC.__name__,
@@ -775,7 +781,7 @@ print("\nAll comparison plots created successfully!")
 # print("negative neuron scores:", *r2_diff_negative_scores)
 
 # ----- ----- ----- ----- ----- r2 with different threshold ----- ----- ----- ----- ----- #
-# plot_different_r2_threshold(test_size, group_by, df_select = "decision_trees_mlp_neuron_6000.pkl", r2_threshold_list=[0.5, 0.7, 0.9])
+plot_different_r2_threshold(test_size, group_by, df_select = "decision_trees_mlp_neuron_6000.pkl", r2_threshold_list=[0.5, 0.7, 0.9])
 
 # %%
 
