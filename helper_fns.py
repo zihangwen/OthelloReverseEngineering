@@ -185,6 +185,29 @@ def calculate_ablation_scores_square(model, layers_neurons, board_seqs_id, valid
 
     return kl_div_BL.mean().item(), clean_accuracy.item(), patch_accuracy.item()
 
+def calculate_ablation_scores_square_probability(model, layers_neurons, board_seqs_id, valid_move_square_mask, valid_move_number, token_id, ablation_method = "zero", threshold = 0.1):
+    logits_clean_BLV, logits_patch_BLV = neuron_intervention(
+        model,
+        layers_neurons=layers_neurons,
+        game_batch_BL=board_seqs_id,
+        ablation_method=ablation_method,
+    )
+    valid_move_square_mask_bool = valid_move_square_mask.to(dtype=bool)
+    kl_div_BL = compute_kl_divergence(logits_clean_BLV, logits_patch_BLV)
+
+    logits_clean_BLV_sm = logits_clean_BLV.softmax(dim=-1)[...,token_id]
+    logits_patch_BLV_sm = logits_patch_BLV.softmax(dim=-1)[...,token_id]
+
+    clean_flat = logits_clean_BLV_sm[valid_move_square_mask_bool]
+    patch_flat = logits_patch_BLV_sm[valid_move_square_mask_bool]
+    valid_move_number_flat = valid_move_number[valid_move_square_mask_bool]
+
+    play_total = valid_move_square_mask_bool.sum()
+    clean_accuracy = (clean_flat > 1 / valid_move_number_flat * threshold).sum() / play_total
+    patch_accuracy = (patch_flat > 1 / valid_move_number_flat * threshold).sum() / play_total
+
+    return kl_div_BL.mean().item(), clean_accuracy.item(), patch_accuracy.item()
+
 # %%
 def get_board_states_and_legal_moves(
     games_square: Int[Tensor, "n_games n_moves"],

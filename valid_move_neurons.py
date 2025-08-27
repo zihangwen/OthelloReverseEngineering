@@ -32,6 +32,7 @@ from helper_fns import (
     get_board_states_and_legal_moves,
     calculate_ablation_scores_game_move,
     calculate_ablation_scores_square,
+    calculate_ablation_scores_square_probability,
     # plot_probe_outputs,
     get_w_in,
     # get_w_out,
@@ -54,6 +55,7 @@ print(f"Using device: {device}")
 # %%
 model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
 model = utils.get_model(model_name, device)
+
 # %% Load the test dataset and process
 test_size = 500
 custom_functions = [
@@ -73,6 +75,7 @@ board_seqs_square = t.tensor(test_data["decoded_inputs"]).long().to(device)
 
 board_states, legal_moves, legal_moves_annotation = get_board_states_and_legal_moves(board_seqs_square)
 legal_moves = legal_moves.to(device=device, dtype=t.float32)
+
 # %% writing neuron
 n_layers = model.cfg.n_layers
 n_neurons = model.cfg.d_mlp
@@ -216,7 +219,7 @@ for topk in topk_list:
 
     topk_temp = sorted(topk_neurons[topk].items(), key=lambda kv: kv[0])
     topk_neurons[topk] = defaultdict(list, topk_temp)
-    
+
 # %% ----- ----- ----- ----- ----- distribution of logits (table) ----- ----- ----- ----- ----- %% #
 # logits_clean_BLV, logits_patch_BLV = neuron_intervention(
 #     model,
@@ -269,10 +272,11 @@ for topk in topk_list:
 
 # %% ablation experiments
 ablation_method="zero"
+accu_threshold=0.5
 topk_scores = defaultdict(dict)
 randk_scores = defaultdict(lambda: defaultdict(dict))
 for topk in topk_list:
-    kl_div_BL, clean_accuracy, patch_accuracy = calculate_ablation_scores_square(
+    kl_div_BL, clean_accuracy, patch_accuracy = calculate_ablation_scores_square_probability(
         model,
         layers_neurons=topk_neurons[topk],
         board_seqs_id=board_seqs_id.to(device),
@@ -280,6 +284,7 @@ for topk in topk_list:
         valid_move_number=valid_move_number.to(device),
         token_id=token_id,
         ablation_method=ablation_method,
+        threshold=accu_threshold,
     )
     topk_scores[topk] = {
         "kl_div_BL": kl_div_BL,
@@ -299,7 +304,7 @@ for topk in topk_list:
         randk_temp = sorted(randk_neurons_topk.items(), key=lambda kv: kv[0])
         randk_neurons_topk = defaultdict(list, randk_temp)
 
-        randk_kl_div_BL, randk_clean_accuracy, randk_patch_accuracy = calculate_ablation_scores_square(
+        randk_kl_div_BL, randk_clean_accuracy, randk_patch_accuracy = calculate_ablation_scores_square_probability(
             model,
             layers_neurons=randk_neurons_topk,
             board_seqs_id=board_seqs_id.to(device),
@@ -307,6 +312,7 @@ for topk in topk_list:
             valid_move_number=valid_move_number.to(device),
             token_id=token_id,
             ablation_method=ablation_method,
+            threshold=accu_threshold,
         )
         randk_scores[topk][i_trial] = {
             "kl_div_BL": randk_kl_div_BL,
@@ -380,7 +386,7 @@ plt.xticks(fontsize=16)
 
 fig.suptitle(f"Square {square_idx} ({arena_utils.to_board_label(square_idx)}), Token ID: {token_id}", fontsize=20)
 fig.tight_layout()
-fig.savefig(f"figures/topk_cross_layer_square{square_idx}_token{token_id}_{ablation_method}_ablation_ci95.png", dpi=600)
+fig.savefig(f"figures/topk_cross_layer_square{square_idx}_token{token_id}_{ablation_method}_ablation_ci95_probability_{accu_threshold:.1f}.png", dpi=600)
 
 # %% print topk neurons for specific square (cross-layer)
 topk = 32
@@ -683,4 +689,23 @@ for i_k, (layer, neuron) in topk_neurons_seperate.items():
 
 # fig.write_image(f"figures/board/game{game_index}_move{move}.png")
 
-# %%
+# %% test
+# logits_clean_BLV, logits_patch_BLV = neuron_intervention(
+#     model,
+#     layers_neurons=topk_neurons[32],
+#     game_batch_BL=board_seqs_id.to(device),
+#     ablation_method="zero",
+# )
+
+# # kl_div_BL = compute_kl_divergence(logits_clean_BLV, logits_patch_BLV)
+
+# logits_clean_BLV_sm = logits_clean_BLV.softmax(dim=-1)[...,token_id]
+# logits_patch_BLV_sm = logits_patch_BLV.softmax(dim=-1)[...,token_id]
+
+# clean_flat = logits_clean_BLV_sm[valid_move_square_mask.to(dtype=bool)]
+# patch_flat = logits_patch_BLV_sm[valid_move_square_mask.to(dtype=bool)]
+# valid_move_number_flat = valid_move_number[valid_move_square_mask.to(dtype=bool)]
+
+# play_total = valid_move_square_mask.sum()
+# clean_accuracy = (clean_flat > 1 / valid_move_number_flat * 0.1).sum() / play_total
+# patch_accuracy = (patch_flat > 1 / valid_move_number_flat * 0.1).sum() / play_total
