@@ -324,6 +324,29 @@ def games_batch_to_input_tokens_classifier_input_BLC(batch_str_moves: list[list[
     return t.stack(game_stack, axis=0)
 
 
+def games_batch_to_just_played_BLC(batch_str_moves: list[list[int]]) -> t.Tensor:
+    iterable = tqdm(batch_str_moves) if len(batch_str_moves) > 50 else batch_str_moves
+
+    game_stack = []
+    for game in iterable:
+        if isinstance(game, t.Tensor):
+            game = game.flatten()
+
+        states = []
+        for i, move in enumerate(game):
+            state = t.zeros(64, dtype=DEFAULT_DTYPE)
+            if move >= 0:
+                if move > 63:
+                    raise ValueError(f"Move {move} is out of bounds")
+                state[move] = 1
+
+            states.append(state)
+
+        states = t.stack(states, axis=0)
+        game_stack.append(states)
+    return t.stack(game_stack, axis=0)
+
+
 def games_batch_to_flipped_classifier_input_BLC(
     batch_str_moves: list[list[int]],
 ) -> t.Tensor:
@@ -441,6 +464,25 @@ def games_batch_to_input_tokens_flipped_bs_classifier_input_BLC(
     )
     flipped_BLC = games_batch_to_flipped_classifier_input_BLC(batch_str_moves)
     return t.cat([input_tokens_bs_BLC, flipped_BLC], dim=-1)
+
+
+def games_batch_to_board_state_flipped_played_BLC(
+    batch_str_moves: list[list[int]],
+) -> t.Tensor:
+    board_state_BLC = games_batch_to_board_state_classifier_input_BLC(batch_str_moves)
+    flipped_BLC = games_batch_to_flipped_classifier_input_BLC(batch_str_moves)
+    just_played_BLC = games_batch_to_just_played_BLC(batch_str_moves)
+    return t.cat([board_state_BLC, flipped_BLC, just_played_BLC], dim=-1)
+
+
+def games_batch_to_board_state_flipped_played_valid_move_BLC(
+    batch_str_moves: list[list[int]],
+) -> t.Tensor:
+    bs_flipped_played = games_batch_to_board_state_flipped_played_BLC(batch_str_moves)
+
+    valid_moves_BLRRC = games_batch_to_valid_moves_BLRRC(batch_str_moves)
+    valid_moves_BLC = einops.rearrange(valid_moves_BLRRC, "B L R1 R2 C -> B L (R1 R2 C)")
+    return t.cat([bs_flipped_played, valid_moves_BLC], dim=-1)
 
 
 def games_batch_to_input_tokens_flipped_pbs_classifier_input_BLC(

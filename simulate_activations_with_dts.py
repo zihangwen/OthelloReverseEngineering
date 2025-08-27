@@ -28,7 +28,7 @@ from circuits.eval_sae_as_classifier import construct_othello_dataset
 import neuron_simulation.simulation_config as sim_config
 
 # Setup
-device = "cuda:0" if torch.cuda.is_available() else "cpu"
+device = "cuda:2" if torch.cuda.is_available() else "cpu"
 torch.set_grad_enabled(False)
 tracer_kwargs = {"validate": False, "scan": False}
 tracer_kwargs = {"validate": True, "scan": True}
@@ -473,15 +473,15 @@ def compute_top_n_accuracy(
     return correct.item(), total.item(), accuracy.item()
 
 
-def add_output_folders():
-    # Get the current working directory
-    current_dir = os.getcwd()
+def add_output_folders(base_path):
+    # # Get the current working directory
+    # current_dir = os.getcwd()
 
-    # Check if we're already in the neuron_simulation directory
-    if os.path.basename(current_dir) == "neuron_simulation":
-        base_path = ""
-    else:
-        base_path = "neuron_simulation"
+    # # Check if we're already in the neuron_simulation directory
+    # if os.path.basename(current_dir) == "neuron_simulation":
+    #     base_path = ""
+    # else:
+    #     base_path = "neuron_simulation"
 
     # Create the directories
     os.makedirs(os.path.join(base_path, "decision_trees"), exist_ok=True)
@@ -1145,7 +1145,7 @@ def update_results_dict(output_file: str, results: dict):
 
 
 def run_simulations(config: sim_config.SimulationConfig):
-    add_output_folders()
+    add_output_folders(config.output_location)
 
     dataset_size = config.n_batches * config.batch_size
 
@@ -1338,7 +1338,9 @@ if __name__ == "__main__":
     # Here you select which functions are going to be used as input to training the decision trees
     # We will iterate over every one
     default_config.custom_functions = [
-        othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC,
+        othello_utils.games_batch_to_board_state_flipped_played_BLC,
+        othello_utils.games_batch_to_board_state_flipped_played_valid_move_BLC,
+        # othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC,
         # othello_utils.games_batch_to_input_tokens_flipped_pbs_classifier_input_BLC,
     ]
 
@@ -1350,9 +1352,10 @@ if __name__ == "__main__":
         sim_config.MLP_dt_config,
         sim_config.MLP_mean_config,
     ]
-    default_config.binary_dt = True  # changed by zihangw
-    default_config.regular_dt = False  # changed by zihangw
+    default_config.binary_dt = False  # changed by zihangw
+    default_config.regular_dt = True  # changed by zihangw
 
+    default_config.output_location = "neuron_decision_trees/"
     # example config change
     # 6 batches seems to work reasonably well for training decision trees
     default_config.n_batches = 6
