@@ -75,6 +75,8 @@ for i, data_entry in enumerate(data):
         values = []
         layers = []
         for layer_tuple, layer_results in sorted(results.items()):
+            # if layer_tuple[0] not in [_ for _ in range(1, 8)]:
+            #     continue
             func_results = layer_results[custom_function_name]
             if metric == "kl":
                 value = func_results["kl"].item()
@@ -105,3 +107,5 @@ plt.legend()
 plt.xlabel("Layer")
 plt.ylabel(metric)
 plt.title(f"Ablation Study - {metric}")
+plt.savefig(f"figures/dt_0826_features/ablation_study_{metric}_mean_ablate.png", dpi=300, bbox_inches='tight')
+# %%
