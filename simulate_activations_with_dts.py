@@ -18,6 +18,7 @@ import os
 import pickle
 import itertools
 from importlib import resources
+import gc
 
 # from xgboost import XGBRegressor, XGBClassifier
 # import cuml
@@ -28,7 +29,8 @@ from circuits.eval_sae_as_classifier import construct_othello_dataset
 import neuron_simulation.simulation_config as sim_config
 
 # Setup
-device = "cuda:2" if torch.cuda.is_available() else "cpu"
+# device = "cuda:2" if torch.cuda.is_available() else "cpu"
+device = "cpu"
 torch.set_grad_enabled(False)
 tracer_kwargs = {"validate": False, "scan": False}
 tracer_kwargs = {"validate": True, "scan": True}
@@ -803,7 +805,8 @@ def compute_predictors(
         return decision_trees
 
     # Use all available cores, but max out at num_cores
-    num_cores = min(num_cores, multiprocessing.cpu_count())
+    # num_cores = min(num_cores, multiprocessing.cpu_count())
+    num_cores = 4
 
     results = {}
 
@@ -1217,8 +1220,18 @@ def run_simulations(config: sim_config.SimulationConfig):
 
             binary_acts = calculate_binary_activations(neuron_acts, config.binary_threshold)
 
-            neuron_acts = utils.to_device(neuron_acts, "cpu")
-            binary_acts = utils.to_device(binary_acts, "cpu")
+            if not config.regular_dt:
+                neuron_acts = {layer: None for layer in neuron_acts}
+            else:
+                neuron_acts = utils.to_device(neuron_acts, "cpu")
+
+            if not config.binary_dt:
+                binary_acts = {layer: None for layer in binary_acts}
+            else:
+                binary_acts = utils.to_device(binary_acts, "cpu")
+
+            torch.cuda.empty_cache()
+            gc.collect()
 
             individual_hyperparameters = hyperparameters.copy()
             individual_hyperparameters["trainer_id"] = trainer_id
@@ -1339,7 +1352,7 @@ if __name__ == "__main__":
     # We will iterate over every one
     default_config.custom_functions = [
         othello_utils.games_batch_to_board_state_flipped_played_BLC,
-        othello_utils.games_batch_to_board_state_flipped_played_valid_move_BLC,
+        # othello_utils.games_batch_to_board_state_flipped_played_valid_move_BLC,
         # othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC,
         # othello_utils.games_batch_to_input_tokens_flipped_pbs_classifier_input_BLC,
     ]
@@ -1352,13 +1365,13 @@ if __name__ == "__main__":
         sim_config.MLP_dt_config,
         sim_config.MLP_mean_config,
     ]
-    default_config.binary_dt = False  # changed by zihangw
-    default_config.regular_dt = True  # changed by zihangw
+    default_config.binary_dt = True  # changed by zihangw
+    default_config.regular_dt = False  # changed by zihangw
 
     default_config.output_location = "neuron_decision_trees/"
     # example config change
     # 6 batches seems to work reasonably well for training decision trees
-    default_config.n_batches = 6
+    default_config.n_batches = 12
     default_config.batch_size = 1000
     run_simulations(default_config)
     print(f"--- {time.time() - start_time} seconds ---")

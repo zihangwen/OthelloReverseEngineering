@@ -8,6 +8,7 @@ from rich import print as rprint
 from rich.table import Column, Table
 from rich.console import Console
 from rich.terminal_theme import MONOKAI
+import os
 
 # from sklearn.tree import plot_tree
 import matplotlib.pyplot as plt
@@ -48,7 +49,7 @@ from helper_fns import (
 #     compute_top_n_accuracy,
 # )
 
-device = "cuda" if t.cuda.is_available() else "cpu"
+device = "cuda:1" if t.cuda.is_available() else "cpu"
 t.set_grad_enabled(False)
 
 print(f"Using device: {device}")
@@ -394,7 +395,7 @@ print(f"Top {topk} neurons for square {square_idx} ({arena_utils.to_board_label(
 for layer, neurons in topk_neurons[topk].items():
     print(f"Layer {layer}: Neurons {neurons}")
 
-# %% ----- ----- ----- ----- ----- ----- topk neurons (layer-neuron pairs) ----- ----- ----- ----- ----- ----- %% #
+# %% ----- ----- ----- ----- ----- topk neurons (layer-neuron pairs) ----- ----- ----- ----- ----- %% #
 topk_neurons_seperate = defaultdict(list)
 topk_neuron_idx = t.topk(neuron_attribution.flatten(), k=2048).indices
 for i_k, idx in enumerate(topk_neuron_idx):
@@ -498,7 +499,7 @@ for i_k, (layer, neuron) in topk_neurons_seperate.items():
 
 # %% ----- ----- ----- ----- ----- ----- decision trees ----- ----- ----- ----- ----- ----- %% #
 # Load decision trees
-dt_name = 'neuron_simulation/decision_trees_bs/decision_trees_mlp_neuron_6000.pkl'
+dt_name = 'neuron_decision_trees/decision_trees_0826_features/decision_trees_mlp_neuron_6000.pkl'
 with open(dt_name, "rb") as f:
     decision_trees = pickle.load(f)
 
@@ -543,7 +544,8 @@ for i_k, (layer, neuron) in topk_neurons_seperate.items():
     # graph.graph_attr.update(label=f"Decision Tree (Rank {i_k}: L{layer}N{neuron})\nR² Score: {r2_score:.4f}", labelloc='top', fontsize='16')
     # graph.render("regression_tree")  # saves PDF/PNG
     # graph
-    graph.render(f"figures/decision_tree/dt_layer_rank_{i_k}_L{layer}N{neuron}", format="png", cleanup=True)
+    os.makedirs(figure_save_path:=f"figures/decision_tree_0826_features/{function_name}", exist_ok=True)
+    graph.render(f"{figure_save_path}/dt_layer_rank_{i_k}_L{layer}N{neuron}", format="png", cleanup=True)
     # print(f"Saved visualization to {save_path}")
     # plt.show()
 

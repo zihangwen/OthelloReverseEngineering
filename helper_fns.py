@@ -488,11 +488,69 @@ def create_bs_feature_names(n_features: int) -> List[str]:
     return feature_names
 
 
+def create_bs_flipped_played_feature_names(n_features: int) -> List[str]:
+    feature_names = []
+    idx = 0
+    # First 192: Board state (8x8x3 = mine/empty/theirs)
+    for square_idx in range(min(64, (n_features - idx) // 3)):
+        row = square_idx // 8  
+        col = square_idx % 8
+        square = chr(ord('A') + row) + str(col)
+        
+        # Add the 3 states for this square
+        if idx < n_features:
+            feature_names.append(f"{square}_mine")
+            idx += 1
+        if idx < n_features:
+            feature_names.append(f"{square}_empty") 
+            idx += 1
+        if idx < n_features:
+            feature_names.append(f"{square}_theirs")
+            idx += 1
+    
+    # Next 64: Flipped squares (A0-H7)
+    for i in range(min(64, n_features - idx)):
+        row = i // 8
+        col = i % 8
+        square = chr(ord('A') + row) + str(col)
+        feature_names.append(f"{square}_flipped")
+        idx += 1
+
+    # Next 64: Last move one-hot encoding (A0-H7)
+    for i in range(min(64, n_features - idx)):
+        row = i // 8
+        col = i % 8
+        square = chr(ord('A') + row) + str(col)
+        feature_names.append(f"{square}_just_played")
+        idx += 1
+    
+    return feature_names
+
+
+def create_bs_flipped_played_valid_move_feature_names(n_features: int) -> List[str]:
+    feature_names = create_bs_flipped_played_feature_names(n_features - 64)
+    idx = n_features - 64
+
+    # Last 64: Valid move squares (A0-H7)
+    for i in range(min(64, n_features - idx)):
+        row = i // 8
+        col = i % 8
+        square = chr(ord('A') + row) + str(col)
+        feature_names.append(f"{square}_is_valid_move")
+        idx += 1
+
+    return feature_names
+
+
 def create_feature_names(n_features: int, function_name) -> List[str]:
     if function_name == "games_batch_to_input_tokens_flipped_pbs_classifier_input_BLC":
         return create_pbs_feature_names(n_features)
     elif function_name == "games_batch_to_input_tokens_flipped_bs_classifier_input_BLC":
         return create_bs_feature_names(n_features)
+    elif function_name == "games_batch_to_board_state_flipped_played_BLC":
+        return create_bs_flipped_played_feature_names(n_features)
+    elif function_name == "games_batch_to_board_state_flipped_played_valid_move_BLC":
+        return create_bs_flipped_played_valid_move_feature_names(n_features)
     else:
         raise ValueError(f"Unknown function name: {function_name}. Cannot create feature names.")
     
