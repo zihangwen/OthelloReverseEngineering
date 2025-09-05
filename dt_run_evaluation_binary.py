@@ -5,6 +5,7 @@ Reads decision tree files and evaluates them on 500 test games with intervention
 """
 
 import argparse
+import time
 import torch
 import pickle
 import os
@@ -185,12 +186,12 @@ def evaluate_dt_binary(
             func_name = custom_function.__name__
             
             # Get test data for this layer and function
-            games_BLC = test_data[layer][func_name]
-            games_BLC = utils.to_device(games_BLC, "cpu")
+            games_BLC = test_data[func_name]
+            # games_BLC = utils.to_device(games_BLC, "cpu")
             
             import einops
-            X = einops.rearrange(games_BLC, "b l c -> (b l) c").cpu().numpy()
-            y_regular = einops.rearrange(binary_acts[layer], "b l d -> (b l) d").cpu().numpy()
+            X = einops.rearrange(games_BLC, "b l c -> (b l) c").astype("int8")
+            y_regular = einops.rearrange(binary_acts[layer], "b l d -> (b l) d").cpu().numpy().astype("int8")
             
             # Get decision tree model and evaluate on test data
             dt_binary_model = decision_trees[layer][func_name]["binary_decision_tree"]["model"]
@@ -271,16 +272,17 @@ def evaluate_dt_binary(
 def main():
     # Hardcoded settings - modify these as needed
     decision_tree_files = [
-        "neuron_simulation/decision_trees_binary/decision_trees_mlp_neuron_6000.pkl",
-        "neuron_simulation/decision_trees_binary/decision_trees_mlp_neuron_600.pkl",
-        "neuron_simulation/decision_trees_binary/decision_trees_mlp_neuron_60.pkl",
+        "neuron_decision_trees/decision_trees/decision_trees_mlp_neuron_30000.pkl",
+        "neuron_decision_trees/decision_trees/decision_trees_mlp_neuron_12000.pkl",
+        "neuron_decision_trees/decision_trees/decision_trees_mlp_neuron_6000.pkl",
+        "neuron_decision_trees/decision_trees/decision_trees_mlp_neuron_600.pkl",
     ]
     input_location = "mlp_neuron"
     trainer_id = 0
     ablation_methods = ["dt", "mean", "zero"]
     # ablation_methods = ["zero", "mean"]
     intervention_layers = [[0], [1], [2], [3], [4], [5], [6], [7]]
-    custom_functions = [othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC]
+    custom_functions = [othello_utils.games_batch_to_board_state_flipped_played_BLC]
     model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
 
     # Other settings
@@ -288,7 +290,7 @@ def main():
     intervention_threshold = 0.7
     binary_threshold = 0.1
     repo_dir = ""  # Base directory, utils.get_ae will append "autoencoders/"
-    output_location = "neuron_simulation/decision_trees_binary_eval"
+    output_location = "neuron_decision_trees/decision_trees_binary_eval"
     ablate_not_selected_options = [True]
     add_error_options = [True]
 
@@ -321,4 +323,5 @@ def main():
 
 
 if __name__ == "__main__":
+    # time.sleep(7200)
     main()

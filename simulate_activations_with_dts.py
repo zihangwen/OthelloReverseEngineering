@@ -57,20 +57,29 @@ def construct_dataset_per_layer(
 
     all_data["encoded_inputs"] = data["encoded_inputs"]
     all_data["decoded_inputs"] = data["decoded_inputs"]
-    all_data["valid_moves"] = data[othello_utils.games_batch_to_valid_moves_BLRRC.__name__].clone()
+    all_data["valid_moves"] = data[othello_utils.games_batch_to_valid_moves_BLRRC.__name__].cpu().numpy().astype(np.int8)
 
-    for layer in layers:
-        if layer not in all_data:
-            all_data[layer] = {}
+    # for layer in layers:
+    #     if layer not in all_data:
+    #         all_data[layer] = {}
 
-        for custom_function in custom_functions:
-            if custom_function == othello_utils.games_batch_to_valid_moves_BLRRC:
-                continue
-            func_name = custom_function.__name__
-            if func_name not in all_data[layer]:
-                all_data[layer][func_name] = {}
+    #     for custom_function in custom_functions:
+    #         if custom_function == othello_utils.games_batch_to_valid_moves_BLRRC:
+    #             continue
+    #         func_name = custom_function.__name__
+    #         if func_name not in all_data[layer]:
+    #             all_data[layer][func_name] = {}
 
-            all_data[layer][func_name] = data[func_name].clone()
+    #         all_data[layer][func_name] = data[func_name].clone()
+
+    for custom_function in custom_functions:
+        if custom_function == othello_utils.games_batch_to_valid_moves_BLRRC:
+            continue
+        func_name = custom_function.__name__
+        if func_name not in all_data:
+            all_data[func_name] = {}
+
+        all_data[func_name] = data[func_name].cpu().numpy().astype(np.int8)
 
     custom_functions.pop()
 
@@ -88,9 +97,9 @@ def load_model_and_data(
     train_data = construct_dataset_per_layer(
         custom_functions, dataset_size, "train", device, layers
     )
-    test_data = construct_dataset_per_layer(custom_functions, dataset_size, "test", device, layers)
+    # test_data = construct_dataset_per_layer(custom_functions, dataset_size, "test", device, layers)
 
-    return model, train_data, test_data
+    return model, train_data, None
 
 
 def load_probe_dict(device: str, num_layers: int, custom_function: Callable) -> dict:
@@ -305,11 +314,16 @@ def calculate_binary_activations(neuron_acts: dict, threshold: float):
         binary_acts[layer] = (neuron_acts[layer] > (threshold * max_activations_D)).int()
     return binary_acts
 
+# def prepare_data(games_BLC: torch.Tensor, mlp_acts_BLD: torch.Tensor):
+#     """sklearn.fit requires 2D input, so we need to flatten the batch and sequence dimensions."""
+#     X = einops.rearrange(games_BLC, "b l c -> (b l) c").cpu().numpy()
+#     y = einops.rearrange(mlp_acts_BLD, "b l d -> (b l) d").cpu().numpy()
+#     return train_test_split(X, y, test_size=0.2, random_state=42)
 
 def prepare_data(games_BLC: torch.Tensor, mlp_acts_BLD: torch.Tensor):
     """sklearn.fit requires 2D input, so we need to flatten the batch and sequence dimensions."""
-    X = einops.rearrange(games_BLC, "b l c -> (b l) c").cpu().numpy()
-    y = einops.rearrange(mlp_acts_BLD, "b l d -> (b l) d").cpu().numpy()
+    X = einops.rearrange(games_BLC, "b l c -> (b l) c")
+    y = einops.rearrange(mlp_acts_BLD, "b l d -> (b l) d")
     return train_test_split(X, y, test_size=0.2, random_state=42)
 
 
@@ -601,6 +615,7 @@ def process_layer_xgb(
 
     return layer_results
 
+
 def process_layer_simple(
     layer: int,
     data_layer: dict,
@@ -622,6 +637,8 @@ def process_layer_simple(
 
     if regular_dt:
         X_train, X_test, y_train, y_test = prepare_data(games_BLC, neuron_acts_layer)
+        # del neuron_acts_layer
+        # gc.collect()
 
         # Decision Tree
         # cmlt_model = cuml.ensemble.RandomForestRegressor(n_estimators=1, bootstrap=False, random_state=random_seed, max_depth=max_depth)
@@ -651,6 +668,9 @@ def process_layer_simple(
         X_binary_train, X_binary_test, y_binary_train, y_binary_test = prepare_data(
             games_BLC, binary_acts_layer
         )
+        del games_BLC, data_layer, binary_acts_layer
+        gc.collect()
+
         dt_binary_model = MultiOutputClassifier(
             DecisionTreeClassifier(
                 random_state=random_seed,
@@ -792,7 +812,7 @@ def compute_predictors(
     regular_dt: bool,
 ) -> dict:
     output_filename = (
-        f"{output_location}decision_trees/decision_trees_{input_location}_{dataset_size}.pkl"
+        f"{output_location}decision_trees_d{max_depth}/decision_trees_{input_location}_{dataset_size}.pkl"
     )
 
     output_dir = os.path.dirname(output_filename)
@@ -805,8 +825,8 @@ def compute_predictors(
         return decision_trees
 
     # Use all available cores, but max out at num_cores
-    # num_cores = min(num_cores, multiprocessing.cpu_count())
-    num_cores = 4
+    num_cores = min(num_cores, multiprocessing.cpu_count())
+    # num_cores = 4
 
     results = {}
 
@@ -821,7 +841,7 @@ def compute_predictors(
         layer_results = Parallel(n_jobs=num_cores)(
             delayed(process_layer_simple)(
                 layer,
-                data[layer],
+                data,
                 func_name,
                 neuron_acts[layer],
                 binary_acts[layer],
@@ -871,7 +891,7 @@ def compute_predictors_iterative(
     max_depth: int,
     threshold_f1: float,
 ) -> dict:
-    output_filename = f"decision_trees/decision_trees_{input_location}_{dataset_size}.pkl"
+    output_filename = f"decision_trees_d{max_depth}/decision_trees_{input_location}_{dataset_size}.pkl"
 
     if not force_recompute and os.path.exists(output_filename):
         print(f"Loading decision trees from {output_filename}")
@@ -1029,7 +1049,7 @@ def perform_interventions(
                     selected_features[layer] = good_f1s
 
                     # output_filename = (
-                    #     f"{output_location}decision_trees/dt_activations_{input_location}_{dataset_size}/layer_{layer}.pkl"
+                    #     f"{output_location}decision_trees_d{max_depth}/dt_activations_{input_location}_{dataset_size}/layer_{layer}.pkl"
                     # )
                     # if not force_recompute and os.path.exists(output_filename):
                     #     print(f"decision tree activations for layer {layer} already exists and loading.")
@@ -1223,12 +1243,18 @@ def run_simulations(config: sim_config.SimulationConfig):
             if not config.regular_dt:
                 neuron_acts = {layer: None for layer in neuron_acts}
             else:
-                neuron_acts = utils.to_device(neuron_acts, "cpu")
+                # neuron_acts = {
+                #     layer: n_act.cpu().numpy().astype(np.float32) for layer, n_act in neuron_acts.items()
+                # }
+                neuron_acts = utils.to_device(neuron_acts, "cpu").numpy()
 
             if not config.binary_dt:
                 binary_acts = {layer: None for layer in binary_acts}
             else:
-                binary_acts = utils.to_device(binary_acts, "cpu")
+                # binary_acts = utils.to_device(binary_acts, "cpu")
+                binary_acts = {
+                    layer: b_act.cpu().numpy().astype(dtype=np.int8) for layer, b_act in binary_acts.items()
+                }
 
             torch.cuda.empty_cache()
             gc.collect()
@@ -1304,7 +1330,7 @@ def run_simulations(config: sim_config.SimulationConfig):
                             },
                         }
 
-                results_filename = f"{config.output_location}decision_trees/results_{input_location}_trainer_{trainer_id}_inputs_{dataset_size}.pkl"
+                results_filename = f"{config.output_location}decision_trees_d{config.max_depth}/results_{input_location}_trainer_{trainer_id}_inputs_{dataset_size}.pkl"
                 update_results_dict(results_filename, results)
 
             else:
@@ -1335,7 +1361,7 @@ def run_simulations(config: sim_config.SimulationConfig):
                     # output_location=config.output_location,
                 )
 
-                ablation_filename = f"{config.output_location}decision_trees/ablation_results_{input_location}_{ablation_method}_ablate_not_selected_{ablate_not_selected}_add_error_{add_error}_trainer_{trainer_id}_inputs_{dataset_size}.pkl"
+                ablation_filename = f"{config.output_location}decision_trees_d{config.max_depth}/ablation_results_{input_location}_{ablation_method}_ablate_not_selected_{ablate_not_selected}_add_error_{add_error}_trainer_{trainer_id}_inputs_{dataset_size}.pkl"
                 update_results_dict(ablation_filename, ablations)
 
 
@@ -1371,7 +1397,8 @@ if __name__ == "__main__":
     default_config.output_location = "neuron_decision_trees/"
     # example config change
     # 6 batches seems to work reasonably well for training decision trees
-    default_config.n_batches = 12
+    default_config.n_batches = 6
     default_config.batch_size = 1000
+    default_config.max_depth = 3
     run_simulations(default_config)
     print(f"--- {time.time() - start_time} seconds ---")

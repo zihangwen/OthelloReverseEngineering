@@ -2,6 +2,7 @@
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
+import re
 import einops
 from collections import defaultdict
 from typing import Callable, Optional
@@ -54,6 +55,12 @@ label_lookup = {
     othello_utils.games_batch_to_input_tokens_classifier_input_BLC.__name__: "Input Tokens",
     othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC.__name__: "Board State, Input Tokens and Flipped Squares",
 }
+
+def extract_numbers(s):
+    numbers = list(map(int, re.findall(r"-?\d+", s)))
+    while len(numbers) < 3:  # Ensure exactly 3 numbers by padding with 0
+        numbers.append(0)
+    return tuple(numbers)
 
 def load_ablation_pickle_files(
     directory: str,
@@ -286,7 +293,7 @@ def plot_dataset_size_comparison_binary(metric: str, test_size: int, group_by: s
         desired_layer_tuples=list(range(8)),
     )
 
-    metric_per_layers = dict(sorted(metric_per_layers.items(), key=lambda key: key))
+    metric_per_layers = dict(sorted(metric_per_layers.items(), key=lambda items: extract_numbers(items[0])))
     print("Metric keys:", list(metric_per_layers.keys()))
     
     all_layers = set()
@@ -522,10 +529,10 @@ def plot_different_metrics(test_size: int, group_by: str = "decision_tree_file",
 
 # %%
 # Create overlay plots comparing different dataset sizes (60, 600, 6000)
-directory = "neuron_simulation/decision_trees_binary_eval"
+directory = "neuron_decision_trees/decision_trees_binary_eval"
 # Updated custom function names to match what you trained with
 custom_function_names = [
-    othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC.__name__,
+    othello_utils.games_batch_to_board_state_flipped_played_BLC.__name__,
 ]
 
 # default_config = sim_config.selected_config
@@ -558,7 +565,7 @@ for metric in metrics_to_compare:
 print("\nAll comparison plots created successfully!")
 
 # %% ----- ----- ----- ----- ----- metric comparison plots ----- ----- ----- ----- ----- %% #
-plot_different_metrics(test_size, group_by, df_select = "decision_trees_mlp_neuron_6000.pkl", metrics_list = metrics_to_compare)
+# plot_different_metrics(test_size, group_by, df_select = "decision_trees_mlp_neuron_6000.pkl", metrics_list = metrics_to_compare)
 
 # %% ----- ----- ----- ----- ----- r2 per neuron ----- ----- ----- ----- ----- %% #
 # r2_diff = plot_dataset_size_comparison_f1_neurons(
