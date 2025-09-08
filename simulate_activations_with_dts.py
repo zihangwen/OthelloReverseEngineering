@@ -1399,6 +1399,6 @@ if __name__ == "__main__":
     # 6 batches seems to work reasonably well for training decision trees
     default_config.n_batches = 6
     default_config.batch_size = 1000
-    default_config.max_depth = 3
+    default_config.max_depth = 5
     run_simulations(default_config)
     print(f"--- {time.time() - start_time} seconds ---")
