@@ -358,10 +358,26 @@ def reorder_list_in_plotly_way(L: list, col_wrap: int):
     """
     Helper function, because Plotly orders figures in an annoying way when there's column wrap.
     """
+    # L_new = []
+    # while len(L) > 0:
+    #     L_new.extend(L[-col_wrap:])
+    #     L = L[:-col_wrap]
+    # return L_new
+
     L_new = []
-    while len(L) > 0:
+    n = len(L)
+
+    # Handle the "incomplete" first row
+    remainder = n % col_wrap
+    if remainder:
+        L_new.extend(L[-remainder:])
+        L = L[:-remainder]
+
+    # Now handle the full rows in reverse order
+    while L:
         L_new.extend(L[-col_wrap:])
         L = L[:-col_wrap]
+
     return L_new
 
 
