@@ -187,6 +187,61 @@ def extract_probe_features(matrices, k=2):
     return filtered_feature_names, directional_feature_names
 
 # %%
+def infer_positive_from_negations(features, group, values):
+    """
+    If all but one value in a group are negated, infer the positive for the last one.
+    """
+    feats = set(features)
+    negs = {v for v in values if f"(NOT {group}_{v})" in feats}
+    remaining = set(values) - negs
+
+    if len(remaining) == 1 and len(negs) == len(values) - 1:
+        # Replace negations with the positive
+        inferred = f"({group}_{remaining.pop()})"
+        feats = (feats - {f"(NOT {group}_{v})" for v in negs}) | {inferred}
+
+    return feats
+
+def remove_negations_if_positive_present(features, group, values):
+    """
+    If a positive feature is present, remove all negations of the same group.
+    """
+    feats = set(features)
+    positives = [f"({group}_{v})" for v in values if f"({group}_{v})" in feats]
+    
+    if positives:
+        # Remove all negations if any positive is present
+        feats = feats - {f"(NOT {group}_{v})" for v in values}
+    
+    return feats
+
+def extract_squares(directional_features):
+    squares = set()
+    for feat in directional_features:
+        squares.add(feat.split("(")[-1].split(" ")[-1].split("_")[0])
+    return squares
+
+def direct_feature_infer(directional_features):
+    squares = extract_squares(directional_features)
+    for square in squares:
+        directional_features = infer_positive_from_negations(directional_features, square, ["mine", "theirs", "empty"])
+        directional_features = remove_negations_if_positive_present(directional_features, square, ["mine", "theirs", "empty"])
+    # filtered = set()
+    # for feat in features:
+    #     if feat.startswith("NOT "):
+    #         continue
+    #     if feat.endswith("_flipped") or feat.endswith("_just_played"):
+    #         continue
+    #     filtered.add(feat)
+    return directional_features
+
+def rule_infer(rule):
+    directional_features = set(rule.split(" AND "))
+    direct_feat_inferred = direct_feature_infer(directional_features)
+    rule_inferred = " AND ".join(sorted(direct_feat_inferred))
+    return rule_inferred
+
+# %%
 # Load decision trees
 # dt_name = 'neuron_simulation/decision_trees_bs/decision_trees_mlp_neuron_6000.pkl'
 # with open(dt_name, "rb") as f:
@@ -350,13 +405,16 @@ just_played_probe_normalized[..., [3, 3, 4, 4], [3, 4, 3, 4]] = 0.0
 
 
 # %%
-# layer = 5
-# neuron = 766
-
+layer = 5
+neuron = 766
+f1_threshold = 0.7
 features_dict = defaultdict(dict)
 for layer in trange(1, n_layers):
     for neuron in range(n_neurons):
         binary_tree_model = binary_decision_trees[layer][binary_function_name]['binary_decision_tree']['model'].estimators_[neuron]
+        f1 = binary_decision_trees[layer][binary_function_name]['binary_decision_tree']['f1'][neuron].item()
+        if f1 < f1_threshold:
+            continue
 
         (rules, pred_strengths, samples_per_rule, features_per_rule), used_features = extract_and_rules(binary_tree_model, binary_feature_names, target_class=1, value_threshold=0.7)
 
@@ -367,12 +425,17 @@ for layer in trange(1, n_layers):
         )
 
         filter_min_samples = binary_tree_model.tree_.n_node_samples[0].item() / 59 * .05
-        filtered_rules = [(rule, strength, samples, features) for rule, strength, samples, features in sorted_rules if samples >= filter_min_samples]
+        filtered_rules = [(rule_infer(rule), strength, samples) for rule, strength, samples, features in sorted_rules if samples >= filter_min_samples]
 
         filtered_features = set()
-        for rule, strength, samples, features in filtered_rules:
+        filtered_direct_features = set()
+        for rule, strength, samples in filtered_rules:
             # print(f"Rule: {rule}\n\t(Strength: {strength:.2f}, Samples: {samples})")
-            filtered_features.update(features)
+            direct_feat_infered = set(rule.split(" AND "))
+            feature_inferred = {feat.split("(")[-1].split(")")[0].split(" ")[-1] for feat in direct_feat_infered}
+            
+            filtered_features.update(feature_inferred)
+            filtered_direct_features.update(direct_feat_infered)
 
         w_in_LN_mine = calculate_neuron_input_weights(model, mine_probe_normalized[layer-1], layer, neuron)
         w_in_LN_empty = calculate_neuron_input_weights(model, empty_probe_normalized[layer-1], layer, neuron)
@@ -389,8 +452,10 @@ for layer in trange(1, n_layers):
             "dt_rules": filtered_rules,
             "dt_used_features": used_features,
             "dt_filtered_features": filtered_features,
+            "dt_filtered_directional_features": filtered_direct_features,
             "probe_directional_features": directional_feature_names,
             "probe_filtered_feature_names": filtered_feature_names,
+            "probe_directional_features_inferred": direct_feature_infer(directional_feature_names.copy()),
         }
 
 # %%
@@ -427,9 +492,12 @@ features_dict_metrics = defaultdict(dict)
 for layer in features_dict:
     for neuron in features_dict[layer]:
         # dt_used_features = features_dict[layer][neuron]["dt_used_features"]
-        dt_filtered_features = features_dict[layer][neuron]["dt_filtered_features"]
-        # probe_directional_features = features_dict[layer][neuron]["probe_directional_features"]
-        probe_filtered_feature_names = features_dict[layer][neuron]["probe_filtered_feature_names"]
+        # dt_filtered_features = features_dict[layer][neuron]["dt_filtered_features"]
+        dt_filtered_features = features_dict[layer][neuron]["dt_filtered_directional_features"]
+
+        # probe_filtered_feature_names = features_dict[layer][neuron]["probe_filtered_feature_names"]
+        probe_filtered_feature_names = features_dict[layer][neuron]["probe_directional_features"]
+        # probe_filtered_feature_names = features_dict[layer][neuron]["probe_directional_features_inferred"]
 
         metrics_dt_probe = set_overlap_metrics(dt_filtered_features, probe_filtered_feature_names)
         # metrics_probe_dt = set_overlap_metrics(probe_filtered_feature_names, dt_filtered_features)
@@ -443,7 +511,7 @@ for layer in features_dict:
         
 # %%
 jaccard_vals = [
-    [features_dict_metrics[l][n]["metrics_dt_probe_jaccard"] for n in range(n_neurons)]
+    [features_dict_metrics[l][n]["metrics_dt_probe_jaccard"] for n in range(n_neurons) if n in features_dict_metrics[l]]
     for l in range(1, n_layers) 
 ]
 # overlap_vals = [
@@ -451,12 +519,12 @@ jaccard_vals = [
 #     for l in range(1, n_layers) 
 # ]
 intersection_over_probe_vals = [
-    [features_dict_metrics[l][n]["metrics_dt_probe_intersection_over_probe"] for n in range(n_neurons)]
+    [features_dict_metrics[l][n]["metrics_dt_probe_intersection_over_probe"] for n in range(n_neurons) if n in features_dict_metrics[l]]
     for l in range(1, n_layers) 
 ]
 
 intersectoin_over_dt_vals = [
-    [features_dict_metrics[l][n]["metrics_dt_probe_intersection_over_dt"] for n in range(n_neurons)]
+    [features_dict_metrics[l][n]["metrics_dt_probe_intersection_over_dt"] for n in range(n_neurons) if n in features_dict_metrics[l]]
     for l in range(1, n_layers)
 ]
 
