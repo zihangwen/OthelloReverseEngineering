@@ -542,6 +542,53 @@ def create_bs_flipped_played_valid_move_feature_names(n_features: int) -> List[s
     return feature_names
 
 
+def get_feature_names_cont_dt():
+    """
+    Generate feature names for all projections.
+    
+    Returns list of feature names in order:
+    - 64 projections for mine - theirs (all squares)
+    - 60 projections for blank (excluding middle 4: D3, D4, E3, E4)
+    - 64 projections for flipped (all squares)
+    - 60 projections for placed (excluding middle 4)
+    """
+    feature_names = []
+    
+    # Helper to get square name from row/col
+    def get_square_name(row, col):
+        row_letter = chr(ord('A') + row)
+        return f"{row_letter}{col}"
+    
+    # 1. Mine - Theirs (all 64 squares)
+    for row in range(8):
+        for col in range(8):
+            square = get_square_name(row, col)
+            feature_names.append(f"{square}_mine-theirs")
+    
+    # 2. Blank (60 squares, excluding D3, D4, E3, E4)
+    middle_squares = {(3, 3), (3, 4), (4, 3), (4, 4)}  # D3, D4, E3, E4
+    for row in range(8):
+        for col in range(8):
+            if (row, col) not in middle_squares:
+                square = get_square_name(row, col)
+                feature_names.append(f"{square}_blank")
+    
+    # 3. Flipped (all 64 squares)
+    for row in range(8):
+        for col in range(8):
+            square = get_square_name(row, col)
+            feature_names.append(f"{square}_flipped")
+    
+    # 4. Placed (60 squares, excluding middle 4)
+    for row in range(8):
+        for col in range(8):
+            if (row, col) not in middle_squares:
+                square = get_square_name(row, col)
+                feature_names.append(f"{square}_just_played")
+    
+    return feature_names
+
+
 def create_feature_names(n_features: int, function_name) -> List[str]:
     if function_name == "games_batch_to_input_tokens_flipped_pbs_classifier_input_BLC":
         return create_pbs_feature_names(n_features)
