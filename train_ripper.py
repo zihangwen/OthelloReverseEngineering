@@ -7,38 +7,78 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 from joblib import Parallel, delayed
 import json
+import torch as t
+import sys
+
+# Add parent directory to path to import circuits modules
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from circuits import othello_utils, utils
+from circuits.eval_sae_as_classifier import construct_othello_dataset
+
+device = t.device("cuda" if t.cuda.is_available() else "cpu")
 
 
 # -----------------------------
-# 1. Data Loading
+# 1. Data Loading - Ground Truth Features (consistent with decision tree training)
 # -----------------------------
-def load_neuron_activations(base_path=None, layers=5):
-    if base_path is None:
-        base_path = "/Users/srujanamedicherla/Desktop/Algoverse_project/OthelloUnderstanding/fine_grained_analysis"
-
-    layer_activations, layer_features = {}, {}
-    print("Loading neuron activation data and input features...")
-
-    for layer in range(1, layers + 1):
-        for kind, store in [("y", layer_activations), ("X", layer_features)]:
-            fname = f"unified_features_{kind}_layer_{layer}.npy"
-            fpath = os.path.join(base_path, fname)
-            try:
-                arr = np.load(fpath)
-                store[layer] = arr
-                print(f"Layer {layer}: Loaded {kind.upper()} with shape {arr.shape}")
-            except FileNotFoundError:
-                print(f"Warning: {kind.upper()} file not found for layer {layer}: {fpath}")
-
-    return layer_activations, layer_features
+def load_ground_truth_data_and_activations(dataset_size=6000, target_layer=5):
+    """Load ground truth features and target layer activations directly"""
+    print("Loading model...")
+    model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
+    model = utils.get_model(model_name, device=device)
+    
+    print("Loading dataset and generating ground truth features...")
+    # Use the same custom function as decision tree training
+    custom_functions = [othello_utils.games_batch_to_board_state_flipped_played_BLC]
+    
+    test_data = construct_othello_dataset(
+        custom_functions=custom_functions,
+        split="test", 
+        device=device, 
+        n_inputs=dataset_size
+    )
+    
+    encoded_inputs = test_data["encoded_inputs"]
+    ground_truth_features = test_data[othello_utils.games_batch_to_board_state_flipped_played_BLC.__name__]
+    
+    # Generate target layer activations
+    print(f"Generating activations for Layer {target_layer}...")
+    neuron_acts = []
+    ground_truth_samples = []
+    
+    for i, game_tokens in enumerate(encoded_inputs):
+        if len(game_tokens) >= 30:  # Use same move range as decision tree training
+            game_tensor = t.tensor(game_tokens[5:30], device=device).unsqueeze(0)  # moves 5-30
+            with t.no_grad():
+                with model.trace(game_tensor, scan=False, validate=False):
+                    mlp_acts = model.blocks[target_layer].mlp.hook_post.output.save()
+            neuron_acts.append(mlp_acts.squeeze(0))
+            
+            # Get corresponding ground truth features for the same games/moves
+            game_features = ground_truth_features[i, 5:30, :]
+            ground_truth_samples.append(game_features.cpu().numpy())
+    
+    if neuron_acts:
+        # Concatenate all activations and ground truth features
+        activations = t.cat(neuron_acts, dim=0).cpu().numpy()
+        ground_truth = np.concatenate(ground_truth_samples, axis=0)
+        
+        print(f"Ground truth features shape: {ground_truth.shape}")
+        print(f"Layer {target_layer} activations shape: {activations.shape}")
+        
+        return ground_truth, activations
+    else:
+        return None, None
 
 
 # -----------------------------
 # 2. Train RIPPER on one neuron
 # -----------------------------
-def train_ripper_on_neuron(layer_features, layer_activations, target_layer, target_neuron, sample_size=50000):
-    X = layer_features[target_layer]
-    Y = layer_activations[target_layer][:, target_neuron]
+def train_ripper_on_neuron(ground_truth_features, layer_activations, target_layer, target_neuron, sample_size=50000):
+    """Train RIPPER on a specific neuron using ground truth features"""
+    X = ground_truth_features  # Ground truth features (same for all layers)
+    Y = layer_activations[:, target_neuron]  # Target neuron activations
 
     # Binary labels: Strong (1) = top 10% activations
     p90 = np.percentile(Y, 90)
@@ -49,7 +89,7 @@ def train_ripper_on_neuron(layer_features, layer_activations, target_layer, targ
     idx = np.random.choice(len(Y), size=n_samples, replace=False)
     X_sampled, y_sampled = X[idx], y_binary[idx]
 
-    # Train/test split
+    # Train/test split (consistent with decision tree training: 80/20 split)
     X_train, X_test, y_train, y_test = train_test_split(
         X_sampled, y_sampled, test_size=0.2, stratify=y_sampled, random_state=42
     )
@@ -81,9 +121,9 @@ def train_ripper_on_neuron(layer_features, layer_activations, target_layer, targ
 # -----------------------------
 # 3. Parallel wrapper
 # -----------------------------
-def train_and_collect(layer, neuron, layer_features, layer_activations):
+def train_and_collect(layer, neuron, ground_truth_features, layer_activations):
     try:
-        return train_ripper_on_neuron(layer_features, layer_activations, layer, neuron)
+        return train_ripper_on_neuron(ground_truth_features, layer_activations, layer, neuron)
     except Exception as e:
         return {"layer": layer, "neuron": neuron, "error": str(e)}
 
@@ -100,16 +140,26 @@ if __name__ == "__main__":
     parser.add_argument("--neurons", type=int, default=2048, help="Total neurons in layer")
     args = parser.parse_args()
 
-    # Load data
-    layer_activations, layer_features = load_neuron_activations()
+    # Load data with ground truth features (consistent with decision tree training)
+    # This now uses the same ground truth features as simulate_activations_with_dts.py
+    # instead of the continuous probe features from create_unified_dataset.py
+    ground_truth_features, layer_activations = load_ground_truth_data_and_activations(target_layer=args.layer)
+
+    if ground_truth_features is None or layer_activations is None:
+        print(f"Error: Could not load data for layer {args.layer}")
+        exit(1)
 
     # Get all neurons in this layer
     assigned_neurons = list(range(args.neurons))
     print(f"Machine assigned: Layer {args.layer}, Neurons 0 → {args.neurons-1}")
+    print(f"Using ground truth features (same for all layers): {ground_truth_features.shape}")
+    print(f"Layer {args.layer} activations: {layer_activations.shape}")
+    
+    #results = train_and_collect(args.layer, 766, ground_truth_features, layer_activations)
 
     # Train in parallel across neurons
     results = Parallel(n_jobs=args.cores, verbose=5)(
-        delayed(train_and_collect)(args.layer, n, layer_features, layer_activations)
+        delayed(train_and_collect)(args.layer, n, ground_truth_features, layer_activations)
         for n in assigned_neurons
     )
 
@@ -119,4 +169,4 @@ if __name__ == "__main__":
     with open(out_path, "w") as f:
         json.dump(results, f, indent=2)
 
-    print(f"✅ Saved results for Layer {args.layer} to {out_path}")
+    print(f"Saved results for Layer {args.layer} to {out_path}")
