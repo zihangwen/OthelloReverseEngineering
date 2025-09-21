@@ -17,6 +17,7 @@ from simulate_activations_with_dts import (
     compute_kl_divergence,
     compute_top_n_accuracy,
 )
+from dataclasses import dataclass
 
 MIDDLE_SQUARES = [27, 28, 35, 36]
 ALL_SQUARES = [i for i in range(64) if i not in MIDDLE_SQUARES]
@@ -207,6 +208,82 @@ def calculate_ablation_scores_square_probability(model, layers_neurons, board_se
     patch_accuracy = (patch_flat > 1 / valid_move_number_flat * threshold).sum() / play_total
 
     return kl_div_BL.mean().item(), clean_accuracy.item(), patch_accuracy.item()
+
+@dataclass
+class InterventionMetrics:
+    kl_div: float
+    logit_diff: float
+    prob_diff: float
+    clean_accuracy: float
+    corrupted_accuracy: float
+    accuracy_diff: float
+    below_1_percent: float
+    below_5_percent: float
+    below_10_percent: float
+
+def calculate_ablation_scores_square_all(model, layers_neurons, board_seqs_id, valid_move_square_mask, valid_move_number, token_id, ablation_method = "zero"):
+    logits_clean_BLV, logits_patch_BLV = neuron_intervention(
+        model,
+        layers_neurons=layers_neurons,
+        game_batch_BL=board_seqs_id,
+        ablation_method=ablation_method,
+    )
+    
+    valid_move_square_mask_bool = valid_move_square_mask.to(dtype=bool)
+    kl_div_BL = compute_kl_divergence(logits_clean_BLV, logits_patch_BLV)
+
+    logits_clean_rank_token = (logits_clean_BLV > logits_clean_BLV[...,token_id].unsqueeze(-1)).sum(-1)
+    clean_total = valid_move_square_mask.sum()
+    clean_correct = ((logits_clean_rank_token < valid_move_number) * valid_move_square_mask).sum()
+    clean_accuracy_topk = clean_correct / clean_total
+
+    logits_patch_rank_token = (logits_patch_BLV > logits_patch_BLV[...,token_id].unsqueeze(-1)).sum(-1)
+    patch_total = valid_move_square_mask.sum()
+    patch_correct = ((logits_patch_rank_token < valid_move_number) * valid_move_square_mask).sum()
+    patch_accuracy_topk = patch_correct / patch_total
+
+    ave_logit_diff = (logits_clean_BLV - logits_patch_BLV)[...,token_id][valid_move_square_mask_bool].mean()
+
+    logits_clean_BLV_sm = logits_clean_BLV.softmax(dim=-1)[...,token_id]
+    logits_patch_BLV_sm = logits_patch_BLV.softmax(dim=-1)[...,token_id]
+
+    clean_flat = logits_clean_BLV_sm[valid_move_square_mask_bool]
+    patch_flat = logits_patch_BLV_sm[valid_move_square_mask_bool]
+    valid_move_number_flat = valid_move_number[valid_move_square_mask_bool]
+
+    ave_prob_diff = (clean_flat - patch_flat).mean()
+
+    play_total = valid_move_square_mask_bool.sum()
+    # clean_accuracy = (clean_flat > 1 / valid_move_number_flat * threshold).sum() / play_total
+    # patch_accuracy = (patch_flat > 1 / valid_move_number_flat * threshold).sum() / play_total
+
+    below_1_percent_corrupted = (patch_flat < 1 / valid_move_number_flat * 0.01).sum() / play_total
+    below_5_percent_corrupted = (patch_flat < 1 / valid_move_number_flat * 0.05).sum() / play_total
+    below_10_percent_corrupted = (patch_flat < 1 / valid_move_number_flat * 0.1).sum() / play_total
+
+    return InterventionMetrics(
+        kl_div=kl_div_BL.mean().item(),
+        logit_diff=ave_logit_diff.item(),
+        prob_diff=ave_prob_diff.item(),
+        clean_accuracy=clean_accuracy_topk.item(),
+        corrupted_accuracy=patch_accuracy_topk.item(),
+        accuracy_diff=(clean_accuracy_topk - patch_accuracy_topk).item(),
+        below_1_percent=below_1_percent_corrupted.item(),
+        below_5_percent=below_5_percent_corrupted.item(),
+        below_10_percent=below_10_percent_corrupted.item(),
+    )
+    # metrics = {
+    #     "kl_div": kl_div_BL.mean().item(),
+    #     "clean_accuracy_topk": clean_accuracy_topk.item(),
+    #     "patch_accuracy_topk": patch_accuracy_topk.item(),
+    #     "ave_logit_diff": ave_logit_diff.item(),
+    #     "ave_prob_diff": ave_prob_diff.item(),
+    #     "below_1_percent_corrupted": below_1_percent_corrupted.item(),
+    #     "below_5_percent_corrupted": below_5_percent_corrupted.item(),
+    #     "below_10_percent_corrupted": below_10_percent_corrupted.item(),
+    # }
+    
+    # return metrics
 
 # %%
 def get_board_states_and_legal_moves(

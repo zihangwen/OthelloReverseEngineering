@@ -7,7 +7,7 @@ import torch as t
 from torch import Tensor
 import numpy as np
 import einops
-from nnsight.models import NNsightModel
+# from nnsight.models import NNsightModel
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.metrics import mean_squared_error
 from sklearn.multioutput import MultiOutputRegressor
@@ -15,16 +15,16 @@ from sklearn.multioutput import MultiOutputRegressor
 import circuits.utils as utils
 import circuits.othello_utils as othello_utils
 from circuits.eval_sae_as_classifier import construct_othello_dataset
-import neel_utils as neel_utils
-from cosine_sims import (
-    load_board_state_probes,
-    load_flipped_probes,
-    load_played_probes,
-    get_mine_theirs_normed,
-    get_blank_normed,
-    get_flipped_normed,
-    get_played_normed,
-)
+import arena_utils as neel_utils
+# from cosine_sims import (
+#     load_board_state_probes,
+#     load_flipped_probes,
+#     load_played_probes,
+#     get_mine_theirs_normed,
+#     get_blank_normed,
+#     get_flipped_normed,
+#     get_played_normed,
+# )
 
 import json
 import pickle
@@ -66,7 +66,7 @@ class DecisionTreeResults:
 def load_model(
     model_name: str = "Baidicoot/Othello-GPT-Transformer-Lens",
     device=device,
-) -> NNsightModel:
+):
     return utils.get_model(model_name, device)
 
 
@@ -106,7 +106,7 @@ def load_data(
 
 @jaxtyped
 def extract_activations_for_layer(
-    model: NNsightModel,
+    model,
     data: Int[Tensor, "n_games n_total_moves"],
     layer: int,
     batch_size: int = 256,
@@ -148,7 +148,7 @@ def extract_activations_for_layer(
 
 @jaxtyped
 def prepare_dt_train_data_for_layer(
-    model: NNsightModel,
+    model,
     train_resid_acts: Float[Tensor, "n_train_games n_moves d_model"],
     train_mlp_post_acts: Float[np.ndarray, "n_train_games n_moves d_mlp"],
     test_resid_acts: Float[Tensor, "n_test_games n_moves d_model"],
@@ -244,7 +244,7 @@ def prepare_dt_train_data_for_layer(
 
 
 def train_dt_for_layer(
-    model: NNsightModel,
+    model,
     X_train: Float[np.ndarray, "n_train_samples n_feats"],
     y_train: Float[np.ndarray, "n_train_samples d_mlp"],
     X_test: Float[np.ndarray, "n_test_samples n_feats"],

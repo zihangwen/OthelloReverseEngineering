@@ -499,7 +499,7 @@ for i_k, (layer, neuron) in topk_neurons_seperate.items():
 
 # %% ----- ----- ----- ----- ----- ----- decision trees ----- ----- ----- ----- ----- ----- %% #
 # Load decision trees
-dt_name = 'neuron_decision_trees/decision_trees_0826_features/decision_trees_mlp_neuron_6000.pkl'
+dt_name = 'neuron_decision_trees/decision_trees_0826_features_regression/decision_trees_mlp_neuron_6000.pkl'
 with open(dt_name, "rb") as f:
     decision_trees = pickle.load(f)
 
@@ -536,7 +536,7 @@ for i_k, (layer, neuron) in topk_neurons_seperate.items():
         filled=True, rounded=True,
         special_characters=True,
         proportion=False,   # scale node size by samples
-        max_depth=3,
+        max_depth=5,
         impurity=False,   # removes "mse" or "variance"
     )
     dot_data = re.sub(r'samples = \d+', '', dot_data)
@@ -544,8 +544,8 @@ for i_k, (layer, neuron) in topk_neurons_seperate.items():
     # graph.graph_attr.update(label=f"Decision Tree (Rank {i_k}: L{layer}N{neuron})\nR² Score: {r2_score:.4f}", labelloc='top', fontsize='16')
     # graph.render("regression_tree")  # saves PDF/PNG
     # graph
-    os.makedirs(figure_save_path:=f"figures/decision_tree_0826_features/{function_name}", exist_ok=True)
-    graph.render(f"{figure_save_path}/dt_layer_rank_{i_k}_L{layer}N{neuron}", format="png", cleanup=True)
+    os.makedirs(figure_save_path:=f"figures/decision_tree_0826_features_pdf_5/{function_name}", exist_ok=True)
+    graph.render(f"{figure_save_path}/dt_layer_rank_{i_k}_L{layer}N{neuron}", format="pdf", cleanup=True)
     # print(f"Saved visualization to {save_path}")
     # plt.show()
 

@@ -753,3 +753,29 @@ def plot_board_values(
 
 
 # plot_single_board(id_to_label(board_seqs_id[0, :5]))
+
+
+# Miscellaneous
+def get_board_states_and_legal_moves(
+    games_square,
+):
+    """
+    Returns the following:
+        states:                 (n_games, n_moves, 8, 8): tensor of board states after each move
+        legal_moves:            (n_games, n_moves, 8, 8): tensor of 1s for legal moves, 0s for illegal moves
+        legal_moves_annotation: (n_games, n_moves, 8, 8): list containing strings of "o" for legal moves (for plotting)
+    """
+    # Create tensors to store the board state & legal moves
+    n_moves = games_square.shape[0]
+    states = torch.zeros((n_moves, 8, 8), dtype=torch.int32)
+    legal_moves = torch.zeros((n_moves, 8, 8), dtype=torch.int32)
+    board = OthelloBoardState()
+    for i in range(n_moves):
+        board.umpire(games_square[i].item())
+        states[i] = torch.from_numpy(board.state)
+        legal_moves[i].flatten()[board.get_valid_moves()] = 1
+
+    # Convert legal moves to annotation
+    legal_moves_annotation = np.where(to_numpy(legal_moves), "o", "").tolist()
+
+    return states, legal_moves, legal_moves_annotation
