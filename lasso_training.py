@@ -13,14 +13,9 @@ import argparse
 import circuits.utils as utils
 import circuits.othello_utils as othello_utils
 from circuits.eval_sae_as_classifier import construct_othello_dataset
+from helper_fns import create_feature_names
 
-# Optimize PyTorch for multi-core CPU usage
-t.set_num_threads(30)  # Use all 30 cores for PyTorch operations
-#from helper_fns import create_feature_names
 
-# ======================================================
-# Sparse Linear Model (all neurons)
-# ======================================================
 class SparseLinear(nn.Module):
     def __init__(self, in_features: int, out_features: int):
         super().__init__()
@@ -35,11 +30,10 @@ class SparseLinear(nn.Module):
         return (self.linear.weight.detach().cpu().numpy(),
                 self.linear.bias.detach().cpu().numpy())
 
-# ======================================================
 # Train sparse model for ALL neurons
-# ======================================================
 def train_all_neurons(X: np.ndarray, y: np.ndarray, layer: int,
-                      l1_lambda=1e-3, lr=1e-3, epochs=200, top_k=10, batch_size=32):
+                     l1_lambda=1e-3, lr=1e-3, epochs=200, top_k=10, batch_size=32,
+                     feature_names: list | None = None, k_sigma: float = 2.0):
     # Try GPU first, fallback to CPU if not available
     device = "cuda" if t.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
@@ -70,8 +64,6 @@ def train_all_neurons(X: np.ndarray, y: np.ndarray, layer: int,
     print(f"Model parameters: {total_params:,}")
     if device == "cuda":
         print(f"GPU memory allocated: {t.cuda.memory_allocated() / 1024**3:.2f} GB")
-    else:
-        print(f"Using 30 CPU cores for training")
     
     # Ensure gradients are enabled
     t.set_grad_enabled(True)
@@ -86,21 +78,9 @@ def train_all_neurons(X: np.ndarray, y: np.ndarray, layer: int,
         t.tensor(y_test, dtype=t.float32)
     )
     
-    # Optimize data loading based on device
-    if device == "cuda":
-        # For GPU: fewer workers to avoid overhead
-        num_workers = min(4, os.cpu_count())
-        pin_memory = True
-    else:
-        # For CPU: use all cores
-        num_workers = min(30, os.cpu_count())
-        pin_memory = False
-    
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, 
-                             num_workers=num_workers, pin_memory=pin_memory)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, 
-                            num_workers=num_workers, pin_memory=pin_memory)
-    print(f"Using {num_workers} cores for data loading, pin_memory={pin_memory}")
+    # Create DataLoaders
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
     optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
@@ -208,6 +188,22 @@ def train_all_neurons(X: np.ndarray, y: np.ndarray, layer: int,
     for rank, neuron_idx in enumerate(top_neuron_idx, 1):
         print(f"  {rank}. Neuron {neuron_idx}: R²={per_neuron_r2[neuron_idx]:.4f}")
 
+    # Optional: compute k-sigma selected features per neuron
+    selected_features_by_neuron = None
+    if feature_names is not None and len(feature_names) == weights.shape[1]:
+        selected_features_by_neuron = {}
+        for n_idx in range(weights.shape[0]):
+            w = weights[n_idx]
+            mu = float(np.mean(w))
+            sigma = float(np.std(w))
+            if sigma == 0.0:
+                sel_idx = []
+            else:
+                sel_idx = np.where(np.abs(w - mu) >= k_sigma * sigma)[0].tolist()
+            selected = [(i, feature_names[i], float(w[i])) for i in sel_idx]
+            selected.sort(key=lambda x: abs(x[2]), reverse=True)
+            selected_features_by_neuron[n_idx] = selected[:20]
+
     return {
         "layer": layer,
         "weights": weights,  # Shape: (2048, 320) - numpy array
@@ -215,11 +211,10 @@ def train_all_neurons(X: np.ndarray, y: np.ndarray, layer: int,
         "test_r2": final_test_r2,  # Overall R² score
         "sparsity": sparsity,  # Overall sparsity
         "per_neuron_r2": per_neuron_r2,  # R² score for each neuron
+        "selected_features_by_neuron": selected_features_by_neuron,
     }
 
-# ======================================================
 # Data loader for all layers
-# ======================================================
 def load_ground_truth_data_and_activations(dataset_size=6000, target_layer=5):
     """Load ground truth features and target layer activations directly"""
     print("Loading model...")
@@ -251,9 +246,8 @@ def load_ground_truth_data_and_activations(dataset_size=6000, target_layer=5):
     print(f"Processing {len(valid_games)} valid games out of {len(encoded_inputs)} total games...")
     
     # Process all valid games in batches for efficiency
-    batch_size = 128  # Process 32 games at once
+    batch_size = 128  # Process 128 games at once
     print(f"Processing all {len(valid_games)} valid games in batches of {batch_size}...")
-    print(f"Using CPU for activation generation (30 cores available)")
     
     for batch_start in range(0, len(valid_games), batch_size):
         batch_end = min(batch_start + batch_size, len(valid_games))
@@ -304,9 +298,6 @@ def load_ground_truth_data_and_activations(dataset_size=6000, target_layer=5):
     else:
         return None, None
 
-# ======================================================
-# MAIN: Train All Layers
-# ======================================================
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_size", type=int, default=6000, help="Dataset size")
@@ -336,7 +327,7 @@ if __name__ == "__main__":
     
     # Create feature names once
     func_name = othello_utils.games_batch_to_board_state_flipped_played_BLC.__name__
-    #feature_names = create_feature_names(ground_truth_features.shape[1], func_name)
+    feature_names = create_feature_names(ground_truth_features.shape[1], func_name)
     
     # Train each layer
     all_results = {}
@@ -360,7 +351,8 @@ if __name__ == "__main__":
         print(f"Training model for layer {layer}...")
         results = train_all_neurons(
             ground_truth_features, layer_activations, layer,
-            l1_lambda=1e-4, lr=1e-3, epochs=100, top_k=10, batch_size=128
+            l1_lambda=1e-4, lr=1e-3, epochs=100, top_k=10, batch_size=128,
+            feature_names=feature_names, k_sigma=2.0
         )
         
         # Store results

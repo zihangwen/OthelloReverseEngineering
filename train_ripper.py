@@ -1,4 +1,4 @@
-# %%
+
 import os
 import numpy as np
 import pandas as pd
@@ -18,10 +18,7 @@ from circuits.eval_sae_as_classifier import construct_othello_dataset
 
 device = t.device("cuda" if t.cuda.is_available() else "cpu")
 
-
-# -----------------------------
-# 1. Data Loading - Ground Truth Features (consistent with decision tree training)
-# -----------------------------
+# Data loading
 def load_ground_truth_data_and_activations(dataset_size=6000, target_layer=5):
     """Load ground truth features and target layer activations directly"""
     print("Loading model...")
@@ -71,10 +68,7 @@ def load_ground_truth_data_and_activations(dataset_size=6000, target_layer=5):
     else:
         return None, None
 
-
-# -----------------------------
-# 2. Train RIPPER on one neuron
-# -----------------------------
+# Train RIPPER on one neuron
 def train_ripper_on_neuron(ground_truth_features, layer_activations, target_layer, target_neuron, sample_size=50000):
     """Train RIPPER on a specific neuron using ground truth features"""
     X = ground_truth_features  # Ground truth features (same for all layers)
@@ -117,32 +111,22 @@ def train_ripper_on_neuron(ground_truth_features, layer_activations, target_laye
         "test_report": report
     }
 
-
-# -----------------------------
-# 3. Parallel wrapper
-# -----------------------------
 def train_and_collect(layer, neuron, ground_truth_features, layer_activations):
     try:
         return train_ripper_on_neuron(ground_truth_features, layer_activations, layer, neuron)
     except Exception as e:
         return {"layer": layer, "neuron": neuron, "error": str(e)}
 
-
-# -----------------------------
-# 4. Main: One Machine = One Layer
-# -----------------------------
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--layer", type=int, required=True, help="Which layer to train on (1–5)")
+    parser.add_argument("--layer", type=int, required=True, help="Which layer to train on (0-7)")
     parser.add_argument("--cores", type=int, default=32, help="Number of CPU cores")
     parser.add_argument("--neurons", type=int, default=2048, help="Total neurons in layer")
     args = parser.parse_args()
 
-    # Load data with ground truth features (consistent with decision tree training)
-    # This now uses the same ground truth features as simulate_activations_with_dts.py
-    # instead of the continuous probe features from create_unified_dataset.py
+    # Load data with ground truth features 
     ground_truth_features, layer_activations = load_ground_truth_data_and_activations(target_layer=args.layer)
 
     if ground_truth_features is None or layer_activations is None:
