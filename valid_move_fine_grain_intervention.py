@@ -185,17 +185,17 @@ def get_filtered_positions_binary(
     mask[:,:5] = False
     mask[:,31:] = False  # only consider moves 5-30
 
-    return mask
-    # filtered_positions_encoded = []
-    # filtered_positions_decoded = []
-    # for game_idx in range(mask.shape[0]):
-    #     indices = t.where(mask[game_idx])[0]
-    #     for idx in indices:
-    #         if 5 <= idx <= 30:
-    #             filtered_positions_encoded.append(encoded_inputs[game_idx, : idx + 1])
-    #             filtered_positions_decoded.append(decoded_inputs[game_idx, : idx + 1])
+    # return mask
+    filtered_positions_encoded = []
+    filtered_positions_decoded = []
+    for game_idx in range(mask.shape[0]):
+        indices = t.where(mask[game_idx])[0]
+        for idx in indices:
+            if 5 <= idx <= 30:
+                filtered_positions_encoded.append(encoded_inputs[game_idx, : idx + 1])
+                filtered_positions_decoded.append(decoded_inputs[game_idx, : idx + 1])
 
-    # return mask, filtered_positions_encoded, filtered_positions_decoded
+    return mask, filtered_positions_encoded, filtered_positions_decoded
 
 def filter_neurons(neurons, w_out, W_U, token_id, threshold=0.0):
     neurons_filtered = defaultdict(list)
@@ -263,32 +263,172 @@ mask_c = get_filtered_positions_binary(
 )
 
 # %%
-# game_index_list, move_index_list = t.where(mask_i)
-# # game_index = 42
-# # move = 42
+# encoded_inputs = t.tensor(test_data["encoded_inputs"])
+# decoded_inputs = t.tensor(test_data["decoded_inputs"])
 
-# idx = 116
+# filtered_positions_encoded = []
+# filtered_positions_decoded = []
+# count = 0
+# for game_idx in range(mask.shape[0]):
+#     indices = t.where(mask[game_idx])[0]
+#     for idx in indices:
+#         if 5 <= idx <= 30:
+#             filtered_positions_encoded.append(encoded_inputs[game_idx, : idx + 1])
+#             filtered_positions_decoded.append(decoded_inputs[game_idx, : idx + 1])
+#             count += 1
+#             if count == batch_size:
+#                 break
+#     if count == batch_size:
+#         print("game_idx:", game_idx, "idx:", idx)
+#         break
 
-# game_index = game_index_list[idx].item()
-# move = move_index_list[idx].item()
+# # %%
+# mask_filter = mask[:game_idx+1]
+# board_seqs_id_filter = board_seqs_id[:game_idx+1]
+# valid_move_number_filter = valid_move_number[:game_idx+1]
 
-# focus_games_id = board_seqs_id[game_index].unsqueeze(0)  # [1, 59]
-# focus_games_square = board_seqs_square[game_index].unsqueeze(0)  # [1, 59]
+# # %%
+# positions=intervention_positions_encoded
+# query=intervention_query
+# # neurons = {layer: [] for layer in range(1, n_layers)}
+# # neurons[5].append(1393)
+# batch_size = 128
 
-# # focus_board_states = board_states[game_index].unsqueeze(0)  # [1, 59, 8, 8]
-# focus_legal_moves = legal_moves[game_index].unsqueeze(0)  # [1, 59, 8, 8]
-# # focus_legal_moves_annotation = legal_moves_annotation[game_index]
+# print(f"Ablating {sum(len(neurons) for neurons in neurons.values())} neurons")
+# legal_square_id = neel_utils.to_id(query[0].square)
 
-# focus_legal_moves_weighted = focus_legal_moves / focus_legal_moves.sum(dim=(-2, -1), keepdim=True)  # [1, 59, 1, 1]
+# clean_logits_square_all = []
+# corrupted_logits_square_all = []
 
-# fig = arena_utils.plot_board_values(
-#     board_states[game_index, move],
-#     width=500,
-#     title=f"After move {move}, {'white' if move % 2 == 0 else 'black'} to play",
-#     text=np.where(to_numpy(legal_moves[game_index, move]), "o", "").tolist(),
+# i = 0
+# batch = positions[i:i + batch_size]
+
+# legal_moves_batch = get_legal_moves_batch(batch)
+# batch_tensor, batch_indices, last_token_indices = right_pad(batch, device=device) 
+
+# clean_logits, clean_logits_square, clean_probs_square = no_ablation(
+#     model, 
+#     batch_tensor, 
+#     batch_indices,
+#     last_token_indices,
+#     legal_square_id,
 # )
 
-# fig.write_image(f"figures/board2/game{game_index}_move{move}.png")
+# # def zero_ablation(
+# #     model,
+# #     batch_tensor,
+# #     batch_indices,
+# #     last_token_indices,
+# #     legal_square_id,
+# #     neurons,
+# # ):
+# #     with model.trace(batch_tensor):
+# #         for layer in range(1, model.cfg.n_layers):
+# #             if neurons[layer]:
+# #                 neuron_indices = t.tensor(neurons[layer], device=device)
+# #                 n_neurons = len(neurons[layer])
+# #                 batch_indices_repeated = einops.repeat(
+# #                     batch_indices,
+# #                     'batch -> batch neurons',
+# #                     neurons=n_neurons,
+# #                 )
+# #                 last_token_indices_repeated = einops.repeat(
+# #                     last_token_indices,
+# #                     'batch -> batch neurons',
+# #                     neurons=n_neurons,
+# #                 )
+# #                 neuron_indices_repeated = einops.repeat(
+# #                     neuron_indices,
+# #                     'neurons -> batch neurons',
+# #                     batch=len(batch_tensor),
+# #                 )
+# #                 model.blocks[layer].mlp.hook_post.output[
+# #                     batch_indices_repeated, 
+# #                     :, 
+# #                     neuron_indices_repeated
+# #                 ] = 0
+        
+# #         logits = model.unembed.output[batch_indices, last_token_indices].save()
+# #         probs = t.nn.functional.softmax(logits, dim=-1)
+        
+# #         logits_square = logits[:, legal_square_id].save()
+# #         probs_square = probs[:, legal_square_id].save()
+
+# #         return logits, logits_square, probs_square
+    
+# corrupted_logits, corrupted_logits_square, corrupted_probs_square = zero_ablation(
+#     model, 
+#     batch_tensor, 
+#     batch_indices,
+#     last_token_indices,
+#     legal_square_id,
+#     neurons,
+# )
+
+# clean_logits_square_all.append(clean_logits_square.cpu())
+# corrupted_logits_square_all.append(corrupted_logits_square.cpu())
+
+# # clean_logits_square_all = t.cat(clean_logits_square_all, dim=0)
+# # corrupted_logits_square_all = t.cat(corrupted_logits_square_all, dim=0)
+
+# # %%
+# valid_move_square_mask = mask_filter.to(device)
+# token_id=arena_utils.to_id(blank_square)
+
+# logits_clean_BLV, logits_patch_BLV = neuron_intervention(
+#     model,
+#     layers_neurons=neurons,
+#     game_batch_BL=board_seqs_id_filter,
+#     ablation_method="zero",
+# )
+
+# valid_move_square_mask_bool = valid_move_square_mask.to(dtype=bool)
+# kl_div_BL = compute_kl_divergence(logits_clean_BLV, logits_patch_BLV)
+
+# logits_clean_rank_token = (logits_clean_BLV > logits_clean_BLV[...,token_id].unsqueeze(-1)).sum(-1)
+# clean_total = valid_move_square_mask.sum()
+# clean_correct = ((logits_clean_rank_token < valid_move_number_filter) * valid_move_square_mask).sum()
+# clean_accuracy_topk = clean_correct / clean_total
+
+# logits_patch_rank_token = (logits_patch_BLV > logits_patch_BLV[...,token_id].unsqueeze(-1)).sum(-1)
+# patch_total = valid_move_square_mask.sum()
+# patch_correct = ((logits_patch_rank_token < valid_move_number_filter) * valid_move_square_mask).sum()
+# patch_accuracy_topk = patch_correct / patch_total
+
+# ave_logit_diff = (logits_clean_BLV - logits_patch_BLV)[...,token_id][valid_move_square_mask_bool].mean()
+
+# # (logits_clean_BLV - logits_patch_BLV)[...,token_id][valid_move_square_mask_bool]
+
+# logits_clean_BLV_test = logits_clean_BLV[...,token_id][valid_move_square_mask_bool]
+# logits_patch_BLV_test = logits_patch_BLV[...,token_id][valid_move_square_mask_bool]
+
+# %%
+game_index_list, move_index_list = t.where(mask_i)
+# game_index = 42
+# move = 42
+
+idx = 116
+
+game_index = game_index_list[idx].item()
+move = move_index_list[idx].item()
+
+focus_games_id = board_seqs_id[game_index].unsqueeze(0)  # [1, 59]
+focus_games_square = board_seqs_square[game_index].unsqueeze(0)  # [1, 59]
+
+# focus_board_states = board_states[game_index].unsqueeze(0)  # [1, 59, 8, 8]
+focus_legal_moves = legal_moves[game_index].unsqueeze(0)  # [1, 59, 8, 8]
+# focus_legal_moves_annotation = legal_moves_annotation[game_index]
+
+focus_legal_moves_weighted = focus_legal_moves / focus_legal_moves.sum(dim=(-2, -1), keepdim=True)  # [1, 59, 1, 1]
+
+fig = arena_utils.plot_board_values(
+    board_states[game_index, move],
+    width=500,
+    title=f"After move {move}, {'white' if move % 2 == 0 else 'black'} to play",
+    text=np.where(to_numpy(legal_moves[game_index, move]), "o", "").tolist(),
+)
+
+fig.write_image(f"figures/board2/game{game_index}_move{move}.png")
 
 # %%
 def find_binary_dt_neurons_for_query(query: list[ConditionBinary]) -> dict[int, list[int]]:
