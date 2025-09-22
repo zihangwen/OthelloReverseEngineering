@@ -13,7 +13,10 @@ import argparse
 import circuits.utils as utils
 import circuits.othello_utils as othello_utils
 from circuits.eval_sae_as_classifier import construct_othello_dataset
-from helper_fns import create_feature_names
+
+# Optimize PyTorch for multi-core CPU usage
+t.set_num_threads(30)  # Use all 30 cores for PyTorch operations
+#from helper_fns import create_feature_names
 
 # ======================================================
 # Sparse Linear Model (all neurons)
@@ -35,9 +38,9 @@ class SparseLinear(nn.Module):
 # ======================================================
 # Train sparse model for ALL neurons
 # ======================================================
-def train_all_neurons(X: np.ndarray, y: np.ndarray,
-                      feature_names: list, layer: int,
+def train_all_neurons(X: np.ndarray, y: np.ndarray, layer: int,
                       l1_lambda=1e-3, lr=1e-3, epochs=200, top_k=10, batch_size=32):
+    # Try GPU first, fallback to CPU if not available
     device = "cuda" if t.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
     
@@ -67,6 +70,8 @@ def train_all_neurons(X: np.ndarray, y: np.ndarray,
     print(f"Model parameters: {total_params:,}")
     if device == "cuda":
         print(f"GPU memory allocated: {t.cuda.memory_allocated() / 1024**3:.2f} GB")
+    else:
+        print(f"Using 30 CPU cores for training")
     
     # Ensure gradients are enabled
     t.set_grad_enabled(True)
@@ -81,8 +86,21 @@ def train_all_neurons(X: np.ndarray, y: np.ndarray,
         t.tensor(y_test, dtype=t.float32)
     )
     
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    # Optimize data loading based on device
+    if device == "cuda":
+        # For GPU: fewer workers to avoid overhead
+        num_workers = min(4, os.cpu_count())
+        pin_memory = True
+    else:
+        # For CPU: use all cores
+        num_workers = min(30, os.cpu_count())
+        pin_memory = False
+    
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, 
+                             num_workers=num_workers, pin_memory=pin_memory)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, 
+                            num_workers=num_workers, pin_memory=pin_memory)
+    print(f"Using {num_workers} cores for data loading, pin_memory={pin_memory}")
 
     optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
@@ -106,7 +124,7 @@ def train_all_neurons(X: np.ndarray, y: np.ndarray,
             mse_loss = criterion(pred, batch_y)
             
             # L1 regularization on the linear layer weights
-            l1_loss = l1_lambda * model.linear.weight.abs().sum()
+            l1_loss = l1_lambda * model.linear.weight.abs().sum() / y_train.shape[1]
             
             total_loss = mse_loss + l1_loss
             total_loss.backward()
@@ -206,6 +224,7 @@ def load_ground_truth_data_and_activations(dataset_size=6000, target_layer=5):
     """Load ground truth features and target layer activations directly"""
     print("Loading model...")
     model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
+    # Use CPU for activation generation to avoid GPU-CPU transfers
     model = utils.get_model(model_name, device="cpu")
     
     print("Loading dataset and generating ground truth features...")
@@ -227,21 +246,55 @@ def load_ground_truth_data_and_activations(dataset_size=6000, target_layer=5):
     neuron_acts = []
     ground_truth_samples = []
     
-    for i, game_tokens in enumerate(encoded_inputs):
-        if len(game_tokens) >= 30:  # Use same move range as decision tree training
-            game_tensor = t.tensor(game_tokens[5:30], device="cpu").unsqueeze(0)  # moves 5-30
-            with t.no_grad():
-                with model.trace(game_tensor, scan=False, validate=False):
-                    mlp_acts = model.blocks[target_layer].mlp.hook_post.output.save()
-            neuron_acts.append(mlp_acts.squeeze(0))
+    # Filter games that have enough moves first
+    valid_games = [(i, game_tokens) for i, game_tokens in enumerate(encoded_inputs) if len(game_tokens) >= 30]
+    print(f"Processing {len(valid_games)} valid games out of {len(encoded_inputs)} total games...")
+    
+    # Process all valid games in batches for efficiency
+    batch_size = 128  # Process 32 games at once
+    print(f"Processing all {len(valid_games)} valid games in batches of {batch_size}...")
+    print(f"Using CPU for activation generation (30 cores available)")
+    
+    for batch_start in range(0, len(valid_games), batch_size):
+        batch_end = min(batch_start + batch_size, len(valid_games))
+        batch_games = valid_games[batch_start:batch_end]
+        
+        if batch_start % (batch_size * 10) == 0:  # Progress tracking every 10 batches
+            print(f"  Processing batch {batch_start//batch_size + 1}/{(len(valid_games) + batch_size - 1)//batch_size}...")
+        
+        # Prepare batch tensors
+        batch_tensors = []
+        batch_indices = []
+        
+        for i, game_tokens in batch_games:
+            game_tensor = t.tensor(game_tokens[5:30], device="cpu")  # moves 5-30
+            batch_tensors.append(game_tensor)
+            batch_indices.append(i)
+        
+        # Stack into batch
+        batch_tensor = t.stack(batch_tensors, dim=0)  # Shape: [batch_size, 25]
+        
+        # Process batch
+        with t.no_grad():
+            with model.trace(batch_tensor):
+                mlp_acts = model.blocks[target_layer].mlp.hook_post.output.save()
             
-            # Get corresponding ground truth features for the same games/moves
-            game_features = ground_truth_features[i, 5:30, :]
-            ground_truth_samples.append(game_features.cpu().numpy())
+            # Access the saved value after the trace context
+            mlp_acts_value = mlp_acts.value  # Shape: [batch_size, 25, 2048]
+            mlp_acts_numpy = mlp_acts_value.detach().numpy()  # Already on CPU
+            
+            # Split batch back into individual games
+            for batch_idx, (i, _) in enumerate(batch_games):
+                game_acts = mlp_acts_numpy[batch_idx]  # Shape: [25, 2048]
+                neuron_acts.append(game_acts)
+                
+                # Get corresponding ground truth features for the same games/moves
+                game_features = ground_truth_features[i, 5:30, :]
+                ground_truth_samples.append(game_features.cpu().numpy())
     
     if neuron_acts:
         # Concatenate all activations and ground truth features
-        activations = t.cat(neuron_acts, dim=0).cpu().numpy()
+        activations = np.concatenate(neuron_acts, axis=0)
         ground_truth = np.concatenate(ground_truth_samples, axis=0)
         
         print(f"Ground truth features shape: {ground_truth.shape}")
@@ -251,18 +304,20 @@ def load_ground_truth_data_and_activations(dataset_size=6000, target_layer=5):
     else:
         return None, None
 
-
-
 # ======================================================
 # MAIN: Train All Layers
 # ======================================================
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_size", type=int, default=6000, help="Dataset size")
+    parser.add_argument("--layer", type=int, default=None, help="Optional single layer to train (0-7)")
     args = parser.parse_args()
 
-    # Train all layers 0-7
-    layers_to_train = list(range(8))  # 0-7
+    # Train selected layer or all layers 0-7
+    if args.layer is not None:
+        layers_to_train = [int(args.layer)]
+    else:
+        layers_to_train = list(range(8))  # 0-7
     neurons_per_layer = 2048
     
     print(f"Dataset size: {args.dataset_size}")
@@ -281,7 +336,7 @@ if __name__ == "__main__":
     
     # Create feature names once
     func_name = othello_utils.games_batch_to_board_state_flipped_played_BLC.__name__
-    feature_names = create_feature_names(ground_truth_features.shape[1], func_name)
+    #feature_names = create_feature_names(ground_truth_features.shape[1], func_name)
     
     # Train each layer
     all_results = {}
@@ -304,7 +359,7 @@ if __name__ == "__main__":
         # Train model for this layer
         print(f"Training model for layer {layer}...")
         results = train_all_neurons(
-            ground_truth_features, layer_activations, feature_names, layer,
+            ground_truth_features, layer_activations, layer,
             l1_lambda=1e-4, lr=1e-3, epochs=100, top_k=10, batch_size=128
         )
         
