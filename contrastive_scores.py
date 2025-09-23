@@ -7,15 +7,15 @@ import torch as t
 import numpy as np
 from pathlib import Path
 
-import circuits_utils
-import arena_utils
-from feature_extraction_utils import (
+import utils.circuits_utils as circuits_utils
+import utils.arena_utils as arena_utils
+from utils.feature_extraction_utils import (
     create_feature_names,
     extract_probe_features,
     extract_rules_features_from_binary_dt,
     set_overlap_metrics,
 )
-from probe_utils import (
+from utils.probe_utils import (
     load_probes_and_normalize,
     calculate_w_in_cossim_with_probes,
 )
@@ -91,5 +91,15 @@ matrices = calculate_w_in_cossim_with_probes(
 )
 
 filtered_feature_names, directional_feature_names = extract_probe_features(matrices, k=2)
+
+# %% ripper load
+with open(f"ripper_all_neurons_analysis.pkl", "rb") as f:
+    ripper_all_neurons_analysis = pickle.load(f)
+
+# %% lasso load
+lasso_results = dict()
+for layer in range(n_layers):
+    with open(f"lasso_results/layer{layer}_results.pkl", "rb") as f:
+        lasso_results[layer] = pickle.load(f)
 
 # %%
