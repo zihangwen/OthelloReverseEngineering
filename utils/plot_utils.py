@@ -14,11 +14,11 @@ from sklearn.tree import export_graphviz
 import torch as t
 from transformer_lens.utils import to_numpy
 
-import analysis.arena_utils as arena_utils
-from analysis.probe_utils import (
-    calculate_win_cossim_with_probes,
+import utils.arena_utils as arena_utils
+from utils.probe_utils import (
+    calculate_w_in_cossim_with_probes,
 )
-from analysis.helper_fns import (
+from utils.helper_fns import (
     get_board_states_and_legal_moves,
 )
 

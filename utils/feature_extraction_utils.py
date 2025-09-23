@@ -1,7 +1,10 @@
 # %%
+from tqdm import trange
 from typing import Optional, List
-from sklearn.tree import _tree
 from collections import defaultdict
+
+from sklearn.tree import _tree
+from skimage.filters import threshold_otsu
 
 # %%
 def create_pbs_feature_names(n_features: int) -> List[str]:
@@ -263,12 +266,12 @@ def extract_rules_features_from_binary_dt(
 ):
     dt_rules = defaultdict(dict)
 
-    for layer in range(num_layers):
+    for layer in trange(num_layers):
         for neuron in range(num_neurons):
             binary_tree_model = binary_decision_trees[layer][custom_function_name]['binary_decision_tree']['model'].estimators_[neuron]
             f1 = binary_decision_trees[layer][custom_function_name]['binary_decision_tree']['f1'][neuron].item()
-            if (f1_threshold is not None) and f1 < f1_threshold:
-                continue
+            # if (f1_threshold is not None) and f1 < f1_threshold:
+            #     continue
 
             (rules, pred_strengths, samples_per_rule, _), _ = extract_and_rules_binary_dt(binary_tree_model, binary_feature_names, target_class=1, value_threshold=0.7)
 
@@ -297,6 +300,7 @@ def extract_rules_features_from_binary_dt(
                 "dt_rules": rule_list,
                 "dt_filtered_features": filtered_features,
                 "dt_filtered_directional_features": filtered_direct_features,
+                "dt_f1": f1,
             }
 
     return dt_rules
@@ -357,6 +361,61 @@ def extract_and_rules_binary_dt(tree, feature_names, target_class=1, min_samples
     
     recurse(0, [], set())
     return (rules, pred_strengths, samples_per_rule, features_per_rule), used_features
+
+# %%
+def extract_rules_features_from_reg_dt(
+    num_layers,
+    num_neurons, 
+    reg_decision_trees,
+    custom_function_name,
+    reg_feature_names,
+    r2_threshold=0.7,
+):
+    dt_rules = defaultdict(dict)
+    features_dict = defaultdict(dict)
+    for layer in trange(num_layers):
+        for neuron in range(num_neurons):
+            # reg_tree_model = reg_decision_trees[layer][neuron].tree
+            # r2 = reg_decision_trees[layer][neuron].test_R2
+            reg_tree_model = reg_decision_trees[layer][custom_function_name]['decision_tree']['model'].estimators_[neuron]
+            r2 = reg_decision_trees[layer][custom_function_name]['decision_tree']['r2'][neuron].item()
+
+            # if r2 < r2_threshold:
+            #     continue
+
+            leaf_mask = reg_tree_model.tree_.children_right == -1
+            leaf_values = reg_tree_model.tree_.value[leaf_mask].flatten()
+            on_off_threshold = threshold_otsu(leaf_values)
+
+            (rules, pred_act, samples_per_rule, features_per_rule), used_features = extract_and_rules_reg_dt(reg_tree_model, reg_feature_names, on_off_threshold=on_off_threshold)
+
+            sorted_rules = sorted(
+                zip(rules, pred_act, samples_per_rule, features_per_rule),
+                key=lambda x: (x[2], x[1]),  # sort by samples_per_rule, then pred_strength
+                reverse=True
+            )
+
+            filter_min_samples = reg_tree_model.tree_.n_node_samples[0].item() / 59 * .05
+            filtered_rules = [(rule_infer(rule), strength, samples) for rule, strength, samples, features in sorted_rules if samples >= filter_min_samples]
+
+            filtered_features = set()
+            filtered_direct_features = set()
+            for rule, strength, samples in filtered_rules:
+                # print(f"Rule: {rule}\n\t(Strength: {strength:.2f}, Samples: {samples})")
+                direct_feat_infered = set(rule.split(" AND "))
+                feature_inferred = {feat.split("(")[-1].split(")")[0].split(" ")[-1] for feat in direct_feat_infered}
+                
+                filtered_features.update(feature_inferred)
+                filtered_direct_features.update(direct_feat_infered)
+
+            dt_rules[layer][neuron] = {
+                "dt_rules": filtered_rules,
+                "dt_filtered_features": filtered_features,
+                "dt_filtered_directional_features": filtered_direct_features,
+                "dt_r2": r2,
+            }
+    
+    return dt_rules
 
 # %%
 def extract_and_rules_reg_dt(
@@ -629,3 +688,25 @@ def set_overlap_metrics(set1, set2):
         "set1_in_set2": set1_in_set2,
         "set2_in_set1": set2_in_set1,
     }
+
+# %%
+def aggregate_scores(d, score_key="f1"):
+    """
+    Aggregates scores by layer across neurons.
+    Assumes structure: dict[layer][neuron][info] = score
+    """
+    layer_scores = {}
+    for layer, neurons in d.items():
+        scores = []
+        if isinstance(neurons, list):
+            for neuron in neurons:
+                score = neuron.get(score_key)
+                if score is not None:
+                    scores.append(score)
+        elif isinstance(neurons, dict):
+            for _, neuron in neurons.items():
+                score = neuron.get(score_key)
+                if score is not None:
+                    scores.append(score)
+        layer_scores[layer] = scores
+    return layer_scores

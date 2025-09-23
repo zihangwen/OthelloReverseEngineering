@@ -3,7 +3,7 @@ from tqdm import tqdm
 from datasets import load_dataset
 import einops
 
-from circuits.othello_engine_utils import OthelloBoardState
+from utils.othello_engine_utils import OthelloBoardState
 
 DEFAULT_DTYPE = t.int16
 

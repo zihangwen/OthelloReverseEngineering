@@ -97,7 +97,7 @@ def calculate_neuron_output_weights(
 # %%
 def load_probes_and_normalize(n_layers, device):
     probe_dict = {i : t.load(
-        f"linear_probes/Othello-GPT-Transformer-Lens_othello_mine_yours_probe_layer_{i}.pth", map_location=str(device), weights_only="True"
+        f"probes/linear_probes/Othello-GPT-Transformer-Lens_othello_mine_yours_probe_layer_{i}.pth", map_location=str(device), weights_only="True"
     )['linear_probe'].squeeze() for i in range(n_layers)}
 
     probe_t = t.stack([probe_dict[i] for i in range(n_layers)], dim=0)  # [layer, d_model, row, col, options]
@@ -111,7 +111,7 @@ def load_probes_and_normalize(n_layers, device):
     empty_probe_normalized[..., [3, 3, 4, 4], [3, 4, 3, 4]] = 0.0
 
     flipped_probe_dict = {i : t.load(
-        f"linear_probes_flipped/resid_{i}_flipped.pth", map_location=str(device), weights_only="True"
+        f"probes/linear_probes_flipped/resid_{i}_flipped.pth", map_location=str(device), weights_only="True"
     ).squeeze() for i in range(n_layers)}
 
     flipped_probe_t = t.stack([flipped_probe_dict[i] for i in range(n_layers)], dim=0)  # [layer, d_model, row, col, options]
@@ -120,7 +120,7 @@ def load_probes_and_normalize(n_layers, device):
     flipped_probe_normalized = flipped_probe / flipped_probe.norm(dim=1, keepdim=True)
     
     just_played_probe_dict = {i : t.load(
-        f"linear_probes_just_played/resid_{i}_played.pth", map_location=str(device), weights_only="True"
+        f"probes/linear_probes_just_played/resid_{i}_played.pth", map_location=str(device), weights_only="True"
     ).squeeze() for i in range(n_layers)
     }
 
@@ -136,7 +136,7 @@ def load_probes_and_normalize(n_layers, device):
 # %%
 def load_fold_probes_and_normalize(n_layers, device):
     probe_dict = {i : t.load(
-        f"linear_probes/Othello-GPT-Transformer-Lens_othello_mine_yours_probe_layer_{i}.pth", map_location=str(device), weights_only="True"
+        f"probes/linear_probes/Othello-GPT-Transformer-Lens_othello_mine_yours_probe_layer_{i}.pth", map_location=str(device), weights_only="True"
     )['linear_probe'].squeeze() for i in range(n_layers)}
 
     probe_t = t.stack([probe_dict[i] for i in range(n_layers)], dim=0)  # [layer, d_model, row, col, options]
@@ -148,7 +148,7 @@ def load_fold_probes_and_normalize(n_layers, device):
     blank_probe_normalized[..., [3, 3, 4, 4], [3, 4, 3, 4]] = 0.0
 
     flipped_probe_dict = {i : t.load(
-        f"linear_probes_flipped/resid_{i}_flipped.pth", map_location=str(device), weights_only="True"
+        f"probes/linear_probes_flipped/resid_{i}_flipped.pth", map_location=str(device), weights_only="True"
     ).squeeze() for i in range(n_layers)}
 
     flipped_probe_t = t.stack([flipped_probe_dict[i] for i in range(n_layers)], dim=0)  # [layer, d_model, row, col, options]
@@ -157,7 +157,7 @@ def load_fold_probes_and_normalize(n_layers, device):
     flipped_probe_normalized = flipped_probe / flipped_probe.norm(dim=1, keepdim=True)
 
     just_played_probe_dict = {i : t.load(
-        f"linear_probes_just_played/resid_{i}_played.pth", map_location=str(device), weights_only="True"
+        f"probes/linear_probes_just_played/resid_{i}_played.pth", map_location=str(device), weights_only="True"
     ).squeeze() for i in range(n_layers)
     }
 
