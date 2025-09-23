@@ -260,6 +260,7 @@ def extract_rules_features_from_binary_dt(
     num_layers,
     num_neurons, 
     binary_decision_trees,
+    f1_scores,
     custom_function_name,
     binary_feature_names,
     f1_threshold=0.7,
@@ -268,8 +269,11 @@ def extract_rules_features_from_binary_dt(
 
     for layer in trange(num_layers):
         for neuron in range(num_neurons):
-            binary_tree_model = binary_decision_trees[layer][custom_function_name]['binary_decision_tree']['model'].estimators_[neuron]
-            f1 = binary_decision_trees[layer][custom_function_name]['binary_decision_tree']['f1'][neuron].item()
+            # binary_tree_model = binary_decision_trees[layer][custom_function_name]['binary_decision_tree']['model'].estimators_[neuron]
+            # f1 = binary_decision_trees[layer][custom_function_name]['binary_decision_tree']['f1'][neuron].item()
+
+            binary_tree_model = binary_decision_trees[layer][neuron]
+            f1 = f1_scores[layer][neuron]
             # if (f1_threshold is not None) and f1 < f1_threshold:
             #     continue
 
@@ -367,6 +371,7 @@ def extract_rules_features_from_reg_dt(
     num_layers,
     num_neurons, 
     reg_decision_trees,
+    r2_scores,
     custom_function_name,
     reg_feature_names,
     r2_threshold=0.7,
@@ -377,8 +382,10 @@ def extract_rules_features_from_reg_dt(
         for neuron in range(num_neurons):
             # reg_tree_model = reg_decision_trees[layer][neuron].tree
             # r2 = reg_decision_trees[layer][neuron].test_R2
-            reg_tree_model = reg_decision_trees[layer][custom_function_name]['decision_tree']['model'].estimators_[neuron]
-            r2 = reg_decision_trees[layer][custom_function_name]['decision_tree']['r2'][neuron].item()
+            # reg_tree_model = reg_decision_trees[layer][custom_function_name]['decision_tree']['model'].estimators_[neuron]
+            # r2 = reg_decision_trees[layer][custom_function_name]['decision_tree']['r2'][neuron].item()
+            reg_tree_model = reg_decision_trees[layer][neuron]
+            r2 = r2_scores[layer][neuron]
 
             # if r2 < r2_threshold:
             #     continue

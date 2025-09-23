@@ -62,6 +62,7 @@ n_neurons = model.cfg.d_mlp
 
 # %% Binary dt
 binary_dt_name = 'neuron_decision_trees/decision_trees_d8/decision_trees_mlp_neuron_6000.pkl'
+
 with open(binary_dt_name, "rb") as f:
     binary_decision_trees = pickle.load(f)
 
@@ -69,19 +70,29 @@ binary_custom_function_name = list(binary_decision_trees[0].keys())[0]
 n_binary_features = binary_decision_trees[0][binary_custom_function_name]["binary_decision_tree"]["model"].n_features_in_
 binary_feature_names = create_feature_names(n_binary_features, binary_custom_function_name)
 
+binary_decision_tree_dict = defaultdict(dict)
+binary_dt_f1 = defaultdict(dict)
+for layer in range(n_layers):
+    for neuron in range(n_neurons):
+        binary_tree_model = binary_decision_trees[layer][binary_custom_function_name]['binary_decision_tree']['model'].estimators_[neuron]
+        f1 = binary_decision_trees[layer][binary_custom_function_name]['binary_decision_tree']['f1'][neuron].item()
+        binary_decision_tree_dict[layer][neuron] = binary_tree_model
+        binary_dt_f1[layer][neuron] = f1
+
 f1_threshold = 0.7
 binary_dt_rules = extract_rules_features_from_binary_dt(
     num_layers = n_layers,
     num_neurons = n_neurons,
-    binary_decision_trees = binary_decision_trees,
+    binary_decision_trees = binary_decision_tree_dict,
+    f1_scores = binary_dt_f1,
     custom_function_name = "games_batch_to_board_state_flipped_played_BLC",
     binary_feature_names = binary_feature_names,
     f1_threshold=f1_threshold,
 )
-binary_dt_f1 = aggregate_scores(binary_dt_rules, score_key="dt_f1")
 
 # %% reg dt
 reg_dt_name = 'neuron_decision_trees/decision_trees_0826_features/decision_trees_mlp_neuron_6000.pkl'
+
 with open(reg_dt_name, "rb") as f:
     reg_decision_trees = pickle.load(f)
 
@@ -89,16 +100,26 @@ reg_custom_function_name = list(reg_decision_trees[0].keys())[0]
 n_reg_features = reg_decision_trees[0][reg_custom_function_name]["decision_tree"]["model"].n_features_in_
 reg_feature_names = create_feature_names(n_reg_features, reg_custom_function_name)
 
+reg_decision_tree_dict = defaultdict(dict)
+reg_dt_r2 = defaultdict(dict)
+
+for layer in range(n_layers):
+    for neuron in range(n_neurons):
+        reg_tree_model = reg_decision_trees[layer][reg_custom_function_name]['decision_tree']['model'].estimators_[neuron]
+        r2 = reg_decision_trees[layer][reg_custom_function_name]['decision_tree']['r2'][neuron].item()
+        reg_decision_tree_dict[layer][neuron] = reg_tree_model
+        reg_dt_r2[layer][neuron] = r2
+
 r2_threshold = 0.7
 reg_dt_rules = extract_rules_features_from_reg_dt(
     num_layers = n_layers,
     num_neurons = n_neurons,
-    reg_decision_trees = reg_decision_trees,
+    reg_decision_trees = reg_decision_tree_dict,
+    r2_scores = reg_dt_r2,
     custom_function_name = "games_batch_to_board_state_flipped_played_BLC",
     reg_feature_names = reg_feature_names,
     r2_threshold=r2_threshold,
 )
-reg_dt_r2 = aggregate_scores(reg_dt_rules, score_key="dt_r2")
 
 # %% probe feature extraction
 probes = load_probes_and_normalize(n_layers, device)
@@ -196,6 +217,16 @@ for layer in range(n_layers):
         lasso_vs_probe_contrastive[layer][neuron] = metrics_lasso_probe
 
 # %%
+jac_metric = "set2_in_set1"
+jac_ylabel = "Score"
+jac_title = "Containment of model feature in Probe features across neurons per Layer"
+jac_output = f"contrastive_analysis_all_methods_containment.png"
+
+# jac_metric = "jaccard_index"
+# jac_ylabel = "Jaccard index"
+# jac_title = "jaccard index of model feature v.s. Probe features across neurons per Layer"
+# jac_output = f"contrastive_analysis_all_methods_jaccard.png"
+
 x = np.arange(n_layers)
 width = 0.35
 
@@ -210,7 +241,7 @@ ax_jac = fig.add_subplot(gs[1, :])  # span both columns
 # Left: R²
 # ax_r2.bar(x - width/2, reg_dt_r2, width, label='Regression DT R²')
 # ax_r2.bar(x + width/2, lasso_r2, width, label='Regression lasso R²')
-ax_r2.boxplot([reg_dt_r2.get(l, []) for l in range(n_layers)], positions=x - width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="skyblue"), label='Regression DT R²')
+ax_r2.boxplot([list(reg_dt_r2.get(l, []).values()) for l in range(n_layers)], positions=x - width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="skyblue"), label='Regression DT R²')
 ax_r2.boxplot([lasso_r2_filter.get(l, []) for l in range(n_layers)], positions=x + width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="orange"), label='Regression lasso R²')
 ax_r2.set_xticks(x)
 ax_r2.set_xticklabels([f"layer {layer}" for layer in range(n_layers)], rotation=45)
@@ -222,7 +253,7 @@ ax_r2.set_title("R² across neurons per Layer")
 # Right: F1
 # ax_f1.bar(x - width/2, binary_dt_f1, width, label='Binary DT F1')
 # ax_f1.bar(x + width/2, ripper_f1, width, label='RIPPER F1')
-ax_f1.boxplot([binary_dt_f1.get(l, []) for l in range(n_layers)], positions=x - width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="lightgreen"), label='Binary DT F1')
+ax_f1.boxplot([list(binary_dt_f1.get(l, []).values()) for l in range(n_layers)], positions=x - width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="lightgreen"), label='Binary DT F1')
 ax_f1.boxplot([ripper_f1.get(l, []) for l in range(n_layers)], positions=x + width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="salmon"), label='RIPPER F1')
 ax_f1.set_xticks(x)
 ax_f1.set_xticklabels([f"layer {layer}" for layer in range(n_layers)], rotation=45)
@@ -233,7 +264,7 @@ ax_f1.set_title("F1 across neurons per Layer")
 
 ax_jac.boxplot(
     [
-        [reg_dt_vs_probe_contrastive[layer][neuron]['set2_in_set1'] for neuron in range(n_neurons)]
+        [reg_dt_vs_probe_contrastive[layer][neuron][jac_metric] for neuron in range(n_neurons)]
         for layer in range(n_layers)
     ],
     positions=x - 3* width / 4,
@@ -241,11 +272,11 @@ ax_jac.boxplot(
     patch_artist=True,
     boxprops=dict(facecolor="skyblue"),
     # label='Jaccard score (Regression DT vs Probe)',
-    label = "Regression DT features in Probe features"
+    label = "Regression DT features"
 )
 ax_jac.boxplot(
     [
-        [lasso_vs_probe_contrastive[layer][neuron]['set2_in_set1'] for neuron in range(n_neurons)]
+        [lasso_vs_probe_contrastive[layer][neuron][jac_metric] for neuron in range(n_neurons)]
         for layer in range(n_layers)
     ],
     positions=x - width / 4,
@@ -253,11 +284,11 @@ ax_jac.boxplot(
     patch_artist=True,
     boxprops=dict(facecolor="orange"),
     # label='Jaccard score (Lasso vs Probe)',
-    label = "Lasso features in Probe features"
+    label = "Lasso features"
 )
 ax_jac.boxplot(
     [
-        [binary_dt_vs_probe_contrastive[layer][neuron]['set2_in_set1'] for neuron in range(n_neurons)]
+        [binary_dt_vs_probe_contrastive[layer][neuron][jac_metric] for neuron in range(n_neurons)]
         for layer in range(n_layers)
     ],
     positions=x + width / 4,
@@ -265,11 +296,11 @@ ax_jac.boxplot(
     patch_artist=True,
     boxprops=dict(facecolor="lightgreen"),
     # label='Jaccard score (Binary DT vs Probe)',
-    label = "Binary DT features in Probe features"
+    label = "Binary DT features"
 )
 ax_jac.boxplot(
     [
-        [ripper_vs_probe_contrastive[layer][neuron]['set2_in_set1'] for neuron in range(n_neurons)]
+        [ripper_vs_probe_contrastive[layer][neuron][jac_metric] for neuron in range(n_neurons)]
         for layer in range(n_layers)
     ],
     positions=x + 3 * width / 4,
@@ -277,16 +308,16 @@ ax_jac.boxplot(
     patch_artist=True,
     boxprops=dict(facecolor="salmon"),
     # label='Jaccard score (RIPPER vs Probe)',
-    label = "RIPPER features in Probe features"
+    label = "RIPPER features"
 )
 ax_jac.set_xticks(x)
 ax_jac.set_xticklabels([f"layer {layer}" for layer in range(n_layers)], rotation=45)
-ax_jac.set_ylabel("Jaccard index")
+ax_jac.set_ylabel(jac_ylabel)
 # ax_jac.set_ylim(0, 1)
-ax_jac.set_title("Contrastive metric across neurons per Layer")
+ax_jac.set_title(jac_title)
 ax_jac.legend(loc='upper right', bbox_to_anchor=(1, 1.3))
 plt.tight_layout()
 # plt.show()
-plt.savefig("figures/contrastive_analysis/contrastive_analysis_all_methods.png", dpi=300, bbox_inches='tight')
+plt.savefig(f"figures/contrastive_analysis/{jac_output}", dpi=300, bbox_inches='tight')
 
 # %%
