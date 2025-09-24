@@ -29,10 +29,10 @@ from utils.probe_utils import (
 )
 from decision_trees.dtypes import DecisionTreeResults, BinaryDecisionTreeResults
 from decision_trees import dtypes
-import decision_trees
+# import decision_trees
 
 sys.modules['dtypes'] = dtypes
-sys.modules['ground_truth_dt'] = decision_trees
+# sys.modules['ground_truth_dt'] = decision_trees
 
 # from helper_fns import (
 #     # MIDDLE_SQUARES,
@@ -99,7 +99,7 @@ for layer in range(n_layers):
         / "ground_truth_features"
         / "classification"
         / "results"
-        / f"layer_{0}_trees.pkl.gz"
+        / f"layer_{layer}_trees.pkl.gz"
     )
     with gzip.open(gt_class_path, "rb") as f:
         gt_feature_classifiers = pickle.load(f)
@@ -107,10 +107,10 @@ for layer in range(n_layers):
     for gt_binary in gt_feature_classifiers:
         try:
             check_is_fitted(gt_binary.tree)
-            binary_decision_tree_dict[layer][gt_binary.neuron] = gt_binary.tree
-            binary_dt_f1[layer][gt_binary.neuron] = gt_binary.test_F1
+            binary_decision_tree_dict[gt_binary.layer][gt_binary.neuron] = gt_binary.tree
+            binary_dt_f1[gt_binary.layer][gt_binary.neuron] = gt_binary.test_F1
         except NotFittedError:
-            print(f"Tree L{layer}N{gt_binary.neuron} is NOT fitted")
+            print(f"Tree L{gt_binary.layer}N{gt_binary.neuron} is NOT fitted")
             continue
 
 binary_feature_names = create_bs_flipped_played_feature_names(320)
@@ -288,12 +288,12 @@ for layer in range(n_layers):
 jac_metric = "set2_in_set1"
 jac_ylabel = "Score"
 jac_title = "Containment of model feature in Probe features across neurons per Layer"
-jac_output = f"contrastive_analysis_all_methods_containment.png"
+jac_output = f"contrastive_analysis_all_methods_containment.pdf"
 
 # jac_metric = "jaccard_index"
 # jac_ylabel = "Jaccard index"
 # jac_title = "jaccard index of model feature v.s. Probe features across neurons per Layer"
-# jac_output = f"contrastive_analysis_all_methods_jaccard.png"
+# jac_output = f"contrastive_analysis_all_methods_jaccard.pdf"
 
 x = np.arange(n_layers)
 width = 0.35
