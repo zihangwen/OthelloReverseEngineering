@@ -4,16 +4,19 @@ import sys
 import pickle
 from collections import defaultdict
 from pathlib import Path
+import gzip
 
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 import torch as t
+from sklearn.utils.validation import check_is_fitted
+from sklearn.exceptions import NotFittedError
 
 import utils.circuits_utils as circuits_utils
 import utils.arena_utils as arena_utils
 from utils.feature_extraction_utils import (
-    create_feature_names,
+    create_bs_flipped_played_feature_names,
     extract_probe_features,
     extract_rules_features_from_binary_dt,
     extract_rules_features_from_reg_dt,
@@ -24,6 +27,13 @@ from utils.probe_utils import (
     load_probes_and_normalize,
     calculate_w_in_cossim_with_probes,
 )
+from decision_trees.dtypes import DecisionTreeResults, BinaryDecisionTreeResults
+from decision_trees import dtypes
+import decision_trees
+
+sys.modules['dtypes'] = dtypes
+sys.modules['ground_truth_dt'] = decision_trees
+
 # from helper_fns import (
 #     # MIDDLE_SQUARES,
 #     neuron_intervention,
@@ -45,7 +55,7 @@ from utils.probe_utils import (
 
 # %%
 BASE_PATH = Path("/home/zihangw/Algoverse/OthelloReverseEngineering")
-os.chdir(BASE_PATH)
+# os.chdir(BASE_PATH)
 
 # device = "cuda" if t.cuda.is_available() else "cpu"
 device = "cpu"
@@ -60,24 +70,50 @@ model = circuits_utils.get_model(model_name, device)
 n_layers = model.cfg.n_layers
 n_neurons = model.cfg.d_mlp
 
-# %% Binary dt
-binary_dt_name = 'neuron_decision_trees/decision_trees_d8/decision_trees_mlp_neuron_6000.pkl'
+# %% Binary dt (d8)
+# binary_dt_name = 'neuron_decision_trees/decision_trees_d8/decision_trees_mlp_neuron_6000.pkl'
 
-with open(binary_dt_name, "rb") as f:
-    binary_decision_trees = pickle.load(f)
+# with open(binary_dt_name, "rb") as f:
+#     binary_decision_trees = pickle.load(f)
 
-binary_custom_function_name = list(binary_decision_trees[0].keys())[0]
-n_binary_features = binary_decision_trees[0][binary_custom_function_name]["binary_decision_tree"]["model"].n_features_in_
-binary_feature_names = create_feature_names(n_binary_features, binary_custom_function_name)
+# binary_custom_function_name = list(binary_decision_trees[0].keys())[0]
+# n_binary_features = binary_decision_trees[0][binary_custom_function_name]["binary_decision_tree"]["model"].n_features_in_
+# binary_feature_names = create_feature_names(n_binary_features, binary_custom_function_name)
 
+# binary_decision_tree_dict = defaultdict(dict)
+# binary_dt_f1 = defaultdict(dict)
+# for layer in range(n_layers):
+#     for neuron in range(n_neurons):
+#         binary_tree_model = binary_decision_trees[layer][binary_custom_function_name]['binary_decision_tree']['model'].estimators_[neuron]
+#         f1 = binary_decision_trees[layer][binary_custom_function_name]['binary_decision_tree']['f1'][neuron].item()
+#         binary_decision_tree_dict[layer][neuron] = binary_tree_model
+#         binary_dt_f1[layer][neuron] = f1
+
+# %%
 binary_decision_tree_dict = defaultdict(dict)
 binary_dt_f1 = defaultdict(dict)
 for layer in range(n_layers):
-    for neuron in range(n_neurons):
-        binary_tree_model = binary_decision_trees[layer][binary_custom_function_name]['binary_decision_tree']['model'].estimators_[neuron]
-        f1 = binary_decision_trees[layer][binary_custom_function_name]['binary_decision_tree']['f1'][neuron].item()
-        binary_decision_tree_dict[layer][neuron] = binary_tree_model
-        binary_dt_f1[layer][neuron] = f1
+    gt_class_path = (
+        BASE_PATH
+        / "decision_trees"
+        / "ground_truth_features"
+        / "classification"
+        / "results"
+        / f"layer_{0}_trees.pkl.gz"
+    )
+    with gzip.open(gt_class_path, "rb") as f:
+        gt_feature_classifiers = pickle.load(f)
+    
+    for gt_binary in gt_feature_classifiers:
+        try:
+            check_is_fitted(gt_binary.tree)
+            binary_decision_tree_dict[layer][gt_binary.neuron] = gt_binary.tree
+            binary_dt_f1[layer][gt_binary.neuron] = gt_binary.test_F1
+        except NotFittedError:
+            print(f"Tree L{layer}N{gt_binary.neuron} is NOT fitted")
+            continue
+
+binary_feature_names = create_bs_flipped_played_feature_names(320)
 
 f1_threshold = 0.7
 binary_dt_rules = extract_rules_features_from_binary_dt(
@@ -85,30 +121,57 @@ binary_dt_rules = extract_rules_features_from_binary_dt(
     num_neurons = n_neurons,
     binary_decision_trees = binary_decision_tree_dict,
     f1_scores = binary_dt_f1,
-    custom_function_name = "games_batch_to_board_state_flipped_played_BLC",
     binary_feature_names = binary_feature_names,
     f1_threshold=f1_threshold,
 )
+binary_dt_f1_filter = {layer: [score for score in scores.values() if score >=0] for layer, scores in binary_dt_f1.items()}
 
-# %% reg dt
-reg_dt_name = 'neuron_decision_trees/decision_trees_0826_features/decision_trees_mlp_neuron_6000.pkl'
+# %% reg dt (d8)
+# reg_dt_name = 'neuron_decision_trees/decision_trees_0826_features/decision_trees_mlp_neuron_6000.pkl'
 
-with open(reg_dt_name, "rb") as f:
-    reg_decision_trees = pickle.load(f)
+# with open(reg_dt_name, "rb") as f:
+#     reg_decision_trees = pickle.load(f)
 
-reg_custom_function_name = list(reg_decision_trees[0].keys())[0]
-n_reg_features = reg_decision_trees[0][reg_custom_function_name]["decision_tree"]["model"].n_features_in_
-reg_feature_names = create_feature_names(n_reg_features, reg_custom_function_name)
+# reg_custom_function_name = list(reg_decision_trees[0].keys())[0]
+# n_reg_features = reg_decision_trees[0][reg_custom_function_name]["decision_tree"]["model"].n_features_in_
+# reg_feature_names = create_feature_names(n_reg_features, reg_custom_function_name)
 
+# reg_decision_tree_dict = defaultdict(dict)
+# reg_dt_r2 = defaultdict(dict)
+
+# for layer in range(n_layers):
+#     for neuron in range(n_neurons):
+#         reg_tree_model = reg_decision_trees[layer][reg_custom_function_name]['decision_tree']['model'].estimators_[neuron]
+#         r2 = reg_decision_trees[layer][reg_custom_function_name]['decision_tree']['r2'][neuron].item()
+#         reg_decision_tree_dict[layer][neuron] = reg_tree_model
+#         reg_dt_r2[layer][neuron] = r2
+
+# %%
 reg_decision_tree_dict = defaultdict(dict)
 reg_dt_r2 = defaultdict(dict)
 
 for layer in range(n_layers):
-    for neuron in range(n_neurons):
-        reg_tree_model = reg_decision_trees[layer][reg_custom_function_name]['decision_tree']['model'].estimators_[neuron]
-        r2 = reg_decision_trees[layer][reg_custom_function_name]['decision_tree']['r2'][neuron].item()
-        reg_decision_tree_dict[layer][neuron] = reg_tree_model
-        reg_dt_r2[layer][neuron] = r2
+    gt_reg_path = (
+        BASE_PATH
+        / "decision_trees"
+        / "ground_truth_features"
+        / "regression"
+        / "results"
+        / f"layer_{layer}_trees.pkl.gz"
+    )
+    with gzip.open(gt_reg_path, "rb") as f:
+        gt_feature_regressors = pickle.load(f)
+    
+    for gt_reg in gt_feature_regressors:
+        try:
+            check_is_fitted(gt_reg.tree)
+            reg_decision_tree_dict[layer][gt_reg.neuron] = gt_reg.tree
+            reg_dt_r2[layer][gt_reg.neuron] = gt_reg.test_R2
+        except NotFittedError:
+            print(f"Tree L{layer}N{gt_binary.neuron} is NOT fitted")
+            continue
+
+reg_feature_names = create_bs_flipped_played_feature_names(320)
 
 r2_threshold = 0.7
 reg_dt_rules = extract_rules_features_from_reg_dt(
@@ -116,10 +179,10 @@ reg_dt_rules = extract_rules_features_from_reg_dt(
     num_neurons = n_neurons,
     reg_decision_trees = reg_decision_tree_dict,
     r2_scores = reg_dt_r2,
-    custom_function_name = "games_batch_to_board_state_flipped_played_BLC",
     reg_feature_names = reg_feature_names,
     r2_threshold=r2_threshold,
 )
+reg_dt_r2_filter = {layer: [score for score in scores.values() if score >=0] for layer, scores in reg_dt_r2.items()}
 
 # %% probe feature extraction
 probes = load_probes_and_normalize(n_layers, device)
@@ -166,6 +229,8 @@ for layer in ripper_all_neurons_analysis:
             "directional_feature_names": directional_feature_names,
         }
 
+ripper_f1_filter = {layer: [score for score in scores if score >=0] for layer, scores in ripper_f1.items()}
+
 # %% lasso load
 lasso_results = dict()
 for layer in range(n_layers):
@@ -199,21 +264,24 @@ lasso_vs_probe_contrastive = defaultdict(dict)
 for layer in range(n_layers):
     for neuron in range(n_neurons):
         probe_feat = probe_features[layer][neuron]["directional_feature_names"]
-        
-        binary_dt_feat = binary_dt_rules[layer][neuron]["dt_filtered_directional_features"]
-        reg_dt_feat = reg_dt_rules[layer][neuron]["dt_filtered_directional_features"]
-        
-        ripper_feat = ripper_features[layer][neuron]["directional_feature_names"]
-        lasso_feat = lasso_features[layer][neuron]["directional_feature_names"]
 
-        metrics_binary_dt_probe = set_overlap_metrics(binary_dt_feat, probe_feat)
+        try:
+            binary_dt_feat = binary_dt_rules[layer][neuron]["dt_filtered_directional_features"]
+            metrics_binary_dt_probe = set_overlap_metrics(binary_dt_feat, probe_feat)
+            binary_dt_vs_probe_contrastive[layer][neuron] = metrics_binary_dt_probe
+        except:
+            pass
+
+        reg_dt_feat = reg_dt_rules[layer][neuron]["dt_filtered_directional_features"]
         metrics_reg_dt_probe = set_overlap_metrics(reg_dt_feat, probe_feat)
-        metrics_ripper_probe = set_overlap_metrics(ripper_feat, probe_feat)
-        metrics_lasso_probe = set_overlap_metrics(lasso_feat, probe_feat) 
-    
-        binary_dt_vs_probe_contrastive[layer][neuron] = metrics_binary_dt_probe
         reg_dt_vs_probe_contrastive[layer][neuron] = metrics_reg_dt_probe
+
+        ripper_feat = ripper_features[layer][neuron]["directional_feature_names"]
+        metrics_ripper_probe = set_overlap_metrics(ripper_feat, probe_feat)
         ripper_vs_probe_contrastive[layer][neuron] = metrics_ripper_probe
+
+        lasso_feat = lasso_features[layer][neuron]["directional_feature_names"]
+        metrics_lasso_probe = set_overlap_metrics(lasso_feat, probe_feat) 
         lasso_vs_probe_contrastive[layer][neuron] = metrics_lasso_probe
 
 # %%
@@ -241,7 +309,7 @@ ax_jac = fig.add_subplot(gs[1, :])  # span both columns
 # Left: R²
 # ax_r2.bar(x - width/2, reg_dt_r2, width, label='Regression DT R²')
 # ax_r2.bar(x + width/2, lasso_r2, width, label='Regression lasso R²')
-ax_r2.boxplot([list(reg_dt_r2.get(l, []).values()) for l in range(n_layers)], positions=x - width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="skyblue"), label='Regression DT R²')
+ax_r2.boxplot([reg_dt_r2_filter.get(l, []) for l in range(n_layers)], positions=x - width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="skyblue"), label='Regression DT R²')
 ax_r2.boxplot([lasso_r2_filter.get(l, []) for l in range(n_layers)], positions=x + width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="orange"), label='Regression lasso R²')
 ax_r2.set_xticks(x)
 ax_r2.set_xticklabels([f"layer {layer}" for layer in range(n_layers)], rotation=45)
@@ -253,8 +321,8 @@ ax_r2.set_title("R² across neurons per Layer")
 # Right: F1
 # ax_f1.bar(x - width/2, binary_dt_f1, width, label='Binary DT F1')
 # ax_f1.bar(x + width/2, ripper_f1, width, label='RIPPER F1')
-ax_f1.boxplot([list(binary_dt_f1.get(l, []).values()) for l in range(n_layers)], positions=x - width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="lightgreen"), label='Binary DT F1')
-ax_f1.boxplot([ripper_f1.get(l, []) for l in range(n_layers)], positions=x + width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="salmon"), label='RIPPER F1')
+ax_f1.boxplot([binary_dt_f1_filter.get(l, []) for l in range(n_layers)], positions=x - width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="lightgreen"), label='Binary DT F1')
+ax_f1.boxplot([ripper_f1_filter.get(l, []) for l in range(n_layers)], positions=x + width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="salmon"), label='RIPPER F1')
 ax_f1.set_xticks(x)
 ax_f1.set_xticklabels([f"layer {layer}" for layer in range(n_layers)], rotation=45)
 ax_f1.set_ylabel("F1 score")
@@ -264,7 +332,7 @@ ax_f1.set_title("F1 across neurons per Layer")
 
 ax_jac.boxplot(
     [
-        [reg_dt_vs_probe_contrastive[layer][neuron][jac_metric] for neuron in range(n_neurons)]
+        [info[jac_metric] for _, info in reg_dt_vs_probe_contrastive[layer].items()]
         for layer in range(n_layers)
     ],
     positions=x - 3* width / 4,
@@ -276,7 +344,7 @@ ax_jac.boxplot(
 )
 ax_jac.boxplot(
     [
-        [lasso_vs_probe_contrastive[layer][neuron][jac_metric] for neuron in range(n_neurons)]
+        [info[jac_metric] for _, info in lasso_vs_probe_contrastive[layer].items()]
         for layer in range(n_layers)
     ],
     positions=x - width / 4,
@@ -288,7 +356,7 @@ ax_jac.boxplot(
 )
 ax_jac.boxplot(
     [
-        [binary_dt_vs_probe_contrastive[layer][neuron][jac_metric] for neuron in range(n_neurons)]
+        [info[jac_metric] for _, info in binary_dt_vs_probe_contrastive[layer].items()]
         for layer in range(n_layers)
     ],
     positions=x + width / 4,
@@ -300,7 +368,7 @@ ax_jac.boxplot(
 )
 ax_jac.boxplot(
     [
-        [ripper_vs_probe_contrastive[layer][neuron][jac_metric] for neuron in range(n_neurons)]
+        [info[jac_metric] for _, info in ripper_vs_probe_contrastive[layer].items()]
         for layer in range(n_layers)
     ],
     positions=x + 3 * width / 4,

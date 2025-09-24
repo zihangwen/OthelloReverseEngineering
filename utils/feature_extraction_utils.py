@@ -261,7 +261,6 @@ def extract_rules_features_from_binary_dt(
     num_neurons, 
     binary_decision_trees,
     f1_scores,
-    custom_function_name,
     binary_feature_names,
     f1_threshold=0.7,
 ):
@@ -269,6 +268,8 @@ def extract_rules_features_from_binary_dt(
 
     for layer in trange(num_layers):
         for neuron in range(num_neurons):
+            if neuron not in binary_decision_trees[layer]:
+                continue
             # binary_tree_model = binary_decision_trees[layer][custom_function_name]['binary_decision_tree']['model'].estimators_[neuron]
             # f1 = binary_decision_trees[layer][custom_function_name]['binary_decision_tree']['f1'][neuron].item()
 
@@ -372,7 +373,6 @@ def extract_rules_features_from_reg_dt(
     num_neurons, 
     reg_decision_trees,
     r2_scores,
-    custom_function_name,
     reg_feature_names,
     r2_threshold=0.7,
 ):
@@ -380,6 +380,8 @@ def extract_rules_features_from_reg_dt(
     features_dict = defaultdict(dict)
     for layer in trange(num_layers):
         for neuron in range(num_neurons):
+            if neuron not in reg_decision_trees[layer]:
+                continue
             # reg_tree_model = reg_decision_trees[layer][neuron].tree
             # r2 = reg_decision_trees[layer][neuron].test_R2
             # reg_tree_model = reg_decision_trees[layer][custom_function_name]['decision_tree']['model'].estimators_[neuron]
