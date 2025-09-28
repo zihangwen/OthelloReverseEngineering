@@ -57,7 +57,7 @@ sys.modules['dtypes'] = dtypes
 # )
 
 # %%
-BASE_PATH = Path("/Users/srujanamedicherla/Desktop/Algoverse_project/OthelloReverseEngineering")
+BASE_PATH = Path("/home/zihangw/Algoverse/OthelloReverseEngineering")
 # os.chdir(BASE_PATH)
 
 # device = "cuda" if t.cuda.is_available() else "cpu"
@@ -295,10 +295,10 @@ jac_ylabel = "Score"
 jac_title = "Containment of model feature in Probe features across neurons per Layer"
 jac_output = f"contrastive_analysis_all_methods_containment.pdf"
 
-jac_metric = "jaccard_index"
-jac_ylabel = "Jaccard index"
-jac_title = "jaccard index of model feature v.s. Probe features across neurons per Layer"
-jac_output = f"contrastive_analysis_all_methods_jaccard.pdf"
+# jac_metric = "jaccard_index"
+# jac_ylabel = "Jaccard index"
+# jac_title = "jaccard index of model feature v.s. Probe features across neurons per Layer"
+# jac_output = f"contrastive_analysis_all_methods_jaccard.pdf"
 
 x = np.arange(n_layers)
 width = 0.35
