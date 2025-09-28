@@ -13,6 +13,9 @@ import torch as t
 from sklearn.utils.validation import check_is_fitted
 from sklearn.exceptions import NotFittedError
 
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import utils.circuits_utils as circuits_utils
 import utils.arena_utils as arena_utils
 from utils.feature_extraction_utils import (
@@ -54,7 +57,7 @@ sys.modules['dtypes'] = dtypes
 # )
 
 # %%
-BASE_PATH = Path("/home/zihangw/Algoverse/OthelloReverseEngineering")
+BASE_PATH = Path("/Users/srujanamedicherla/Desktop/Algoverse_project/OthelloReverseEngineering")
 # os.chdir(BASE_PATH)
 
 # device = "cuda" if t.cuda.is_available() else "cpu"
@@ -214,17 +217,19 @@ ripper_f1 = aggregate_scores(ripper_all_neurons_analysis, score_key="f1_score")
 
 ripper_features = defaultdict(dict)
 for layer in ripper_all_neurons_analysis:
-    for neuron, info in enumerate(ripper_all_neurons_analysis[layer]):
-        features = info["feature_weights"].keys()
+    for neuron_index, info in enumerate(ripper_all_neurons_analysis[layer]):
+       
+        neuron_id = info["neuron_id"]
+        top_features = info["top_features"]
         feature_names = set()
         directional_feature_names = set()
-        for feat_name, feat_score in info["feature_weights"].items():
+        for feat_name, feat_score in top_features:
             feature_names.update({f"{feat_name}"})
             if feat_score > 0:
                 directional_feature_names.update({f"({feat_name})"})
             else:
                 directional_feature_names.update({f"(NOT {feat_name})"})
-        ripper_features[layer][neuron] = {
+        ripper_features[layer][neuron_id] = {
             "feature_names": feature_names,
             "directional_feature_names": directional_feature_names,
         }
@@ -290,10 +295,10 @@ jac_ylabel = "Score"
 jac_title = "Containment of model feature in Probe features across neurons per Layer"
 jac_output = f"contrastive_analysis_all_methods_containment.pdf"
 
-# jac_metric = "jaccard_index"
-# jac_ylabel = "Jaccard index"
-# jac_title = "jaccard index of model feature v.s. Probe features across neurons per Layer"
-# jac_output = f"contrastive_analysis_all_methods_jaccard.pdf"
+jac_metric = "jaccard_index"
+jac_ylabel = "Jaccard index"
+jac_title = "jaccard index of model feature v.s. Probe features across neurons per Layer"
+jac_output = f"contrastive_analysis_all_methods_jaccard.pdf"
 
 x = np.arange(n_layers)
 width = 0.35
@@ -309,8 +314,8 @@ ax_jac = fig.add_subplot(gs[1, :])  # span both columns
 # Left: R²
 # ax_r2.bar(x - width/2, reg_dt_r2, width, label='Regression DT R²')
 # ax_r2.bar(x + width/2, lasso_r2, width, label='Regression lasso R²')
-ax_r2.boxplot([reg_dt_r2_filter.get(l, []) for l in range(n_layers)], positions=x - width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="skyblue"), label='Regression DT R²')
-ax_r2.boxplot([lasso_r2_filter.get(l, []) for l in range(n_layers)], positions=x + width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="orange"), label='Regression lasso R²')
+ax_r2.boxplot([reg_dt_r2_filter.get(l, []) for l in range(n_layers)], positions=x - width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="skyblue"))
+ax_r2.boxplot([lasso_r2_filter.get(l, []) for l in range(n_layers)], positions=x + width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="orange"))
 ax_r2.set_xticks(x)
 ax_r2.set_xticklabels([f"layer {layer}" for layer in range(n_layers)], rotation=45)
 ax_r2.set_ylabel("R² score")
@@ -321,8 +326,8 @@ ax_r2.set_title("R² across neurons per Layer")
 # Right: F1
 # ax_f1.bar(x - width/2, binary_dt_f1, width, label='Binary DT F1')
 # ax_f1.bar(x + width/2, ripper_f1, width, label='RIPPER F1')
-ax_f1.boxplot([binary_dt_f1_filter.get(l, []) for l in range(n_layers)], positions=x - width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="lightgreen"), label='Binary DT F1')
-ax_f1.boxplot([ripper_f1_filter.get(l, []) for l in range(n_layers)], positions=x + width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="salmon"), label='RIPPER F1')
+ax_f1.boxplot([binary_dt_f1_filter.get(l, []) for l in range(n_layers)], positions=x - width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="lightgreen"))
+ax_f1.boxplot([ripper_f1_filter.get(l, []) for l in range(n_layers)], positions=x + width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="salmon"))
 ax_f1.set_xticks(x)
 ax_f1.set_xticklabels([f"layer {layer}" for layer in range(n_layers)], rotation=45)
 ax_f1.set_ylabel("F1 score")
@@ -340,7 +345,7 @@ ax_jac.boxplot(
     patch_artist=True,
     boxprops=dict(facecolor="skyblue"),
     # label='Jaccard score (Regression DT vs Probe)',
-    label = "Regression DT features"
+    #label = "Regression DT features"
 )
 ax_jac.boxplot(
     [
@@ -352,7 +357,7 @@ ax_jac.boxplot(
     patch_artist=True,
     boxprops=dict(facecolor="orange"),
     # label='Jaccard score (Lasso vs Probe)',
-    label = "Lasso features"
+    #label = "Lasso features"
 )
 ax_jac.boxplot(
     [
@@ -364,7 +369,7 @@ ax_jac.boxplot(
     patch_artist=True,
     boxprops=dict(facecolor="lightgreen"),
     # label='Jaccard score (Binary DT vs Probe)',
-    label = "Binary DT features"
+    #label = "Binary DT features"
 )
 ax_jac.boxplot(
     [
@@ -376,14 +381,20 @@ ax_jac.boxplot(
     patch_artist=True,
     boxprops=dict(facecolor="salmon"),
     # label='Jaccard score (RIPPER vs Probe)',
-    label = "RIPPER features"
+    #label = "RIPPER features"
 )
 ax_jac.set_xticks(x)
 ax_jac.set_xticklabels([f"layer {layer}" for layer in range(n_layers)], rotation=45)
 ax_jac.set_ylabel(jac_ylabel)
 # ax_jac.set_ylim(0, 1)
 ax_jac.set_title(jac_title)
-ax_jac.legend(loc='upper right', bbox_to_anchor=(1, 1.3))
+from matplotlib.patches import Patch
+# Add legend for contrastive analysis plot
+legend_elements_jac = [Patch(facecolor='skyblue', label='Regression DT features'),
+                       Patch(facecolor='orange', label='Lasso features'),
+                       Patch(facecolor='lightgreen', label='Binary DT features'),
+                       Patch(facecolor='salmon', label='RIPPER features')]
+ax_jac.legend(handles=legend_elements_jac, loc='upper right', bbox_to_anchor=(1, 1.3))
 plt.tight_layout()
 # plt.show()
 plt.savefig(f"figures/contrastive_analysis/{jac_output}", dpi=300, bbox_inches='tight')
