@@ -55,7 +55,7 @@ sys.modules['dtypes'] = dtypes
 
 # %%
 BASE_PATH = Path("/home/zihangw/Algoverse/OthelloReverseEngineering")
-# os.chdir(BASE_PATH)
+os.chdir(BASE_PATH)
 
 # device = "cuda" if t.cuda.is_available() else "cpu"
 device = "cpu"
@@ -214,17 +214,18 @@ ripper_f1 = aggregate_scores(ripper_all_neurons_analysis, score_key="f1_score")
 
 ripper_features = defaultdict(dict)
 for layer in ripper_all_neurons_analysis:
-    for neuron, info in enumerate(ripper_all_neurons_analysis[layer]):
-        features = info["feature_weights"].keys()
+    for info in ripper_all_neurons_analysis[layer]:
+        neuron_id = info["neuron_id"]
+        # features = info["feature_weights"].keys()
         feature_names = set()
         directional_feature_names = set()
-        for feat_name, feat_score in info["feature_weights"].items():
+        for feat_name, feat_score in info["top_features"]:
             feature_names.update({f"{feat_name}"})
             if feat_score > 0:
                 directional_feature_names.update({f"({feat_name})"})
             else:
                 directional_feature_names.update({f"(NOT {feat_name})"})
-        ripper_features[layer][neuron] = {
+        ripper_features[layer][neuron_id] = {
             "feature_names": feature_names,
             "directional_feature_names": directional_feature_names,
         }
@@ -285,15 +286,15 @@ for layer in range(n_layers):
         lasso_vs_probe_contrastive[layer][neuron] = metrics_lasso_probe
 
 # %%
-jac_metric = "set2_in_set1"
-jac_ylabel = "Score"
-jac_title = "Containment of model feature in Probe features across neurons per Layer"
-jac_output = f"contrastive_analysis_all_methods_containment.pdf"
+# jac_metric = "set2_in_set1"
+# jac_ylabel = "Score"
+# jac_title = "Containment of model feature in Probe features across neurons per Layer"
+# jac_output = f"contrastive_analysis_all_methods_containment.pdf"
 
-# jac_metric = "jaccard_index"
-# jac_ylabel = "Jaccard index"
-# jac_title = "jaccard index of model feature v.s. Probe features across neurons per Layer"
-# jac_output = f"contrastive_analysis_all_methods_jaccard.pdf"
+jac_metric = "jaccard_index"
+jac_ylabel = "Jaccard index"
+jac_title = "jaccard index of model feature v.s. Probe features across neurons per Layer"
+jac_output = f"contrastive_analysis_all_methods_jaccard.pdf"
 
 x = np.arange(n_layers)
 width = 0.35
