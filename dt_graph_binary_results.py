@@ -337,7 +337,7 @@ def plot_dataset_size_comparison_binary(metric: str, test_size: int, group_by: s
     plt.yticks(fontsize=16)
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(f"figures/images/{metric}_dataset_size_comparison_mean.png", dpi=300, bbox_inches='tight')
+    plt.savefig(f"figures/images/{metric}_dataset_size_comparison_mean.pdf", dpi=300, bbox_inches='tight')
     plt.show()
 
 
@@ -529,7 +529,7 @@ def plot_different_metrics(test_size: int, group_by: str = "decision_tree_file",
 
 # %%
 # Create overlay plots comparing different dataset sizes (60, 600, 6000)
-directory = "neuron_decision_trees/decision_trees_binary_eval"
+directory = "archive/d8_trees_and_contrastive/neuron_decision_trees/decision_trees_binary_d8_eval"
 # Updated custom function names to match what you trained with
 custom_function_names = [
     othello_utils.games_batch_to_board_state_flipped_played_BLC.__name__,

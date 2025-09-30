@@ -272,10 +272,11 @@ def evaluate_dt_binary(
 def main():
     # Hardcoded settings - modify these as needed
     decision_tree_files = [
-        "neuron_decision_trees/decision_trees/decision_trees_mlp_neuron_30000.pkl",
-        "neuron_decision_trees/decision_trees/decision_trees_mlp_neuron_12000.pkl",
-        "neuron_decision_trees/decision_trees/decision_trees_mlp_neuron_6000.pkl",
-        "neuron_decision_trees/decision_trees/decision_trees_mlp_neuron_600.pkl",
+        "neuron_decision_trees/decision_trees_d8/decision_trees_mlp_neuron_30000.pkl",
+        "neuron_decision_trees/decision_trees_d8/decision_trees_mlp_neuron_12000.pkl",
+        "neuron_decision_trees/decision_trees_d8/decision_trees_mlp_neuron_6000.pkl",
+        "neuron_decision_trees/decision_trees_d8/decision_trees_mlp_neuron_600.pkl",
+        "neuron_decision_trees/decision_trees_d8/decision_trees_mlp_neuron_60.pkl",
     ]
     input_location = "mlp_neuron"
     trainer_id = 0
