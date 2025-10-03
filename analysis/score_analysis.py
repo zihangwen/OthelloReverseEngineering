@@ -18,17 +18,9 @@ BASE_PATH = os.path.dirname(os.path.dirname(__file__))
 BASE_PATH = Path(BASE_PATH)
 os.chdir(BASE_PATH)
 
-import utils.circuits_utils as circuits_utils
-import utils.arena_utils as arena_utils
 from utils.feature_extraction_utils import (
-    create_bs_flipped_played_feature_names,
     aggregate_scores,
 )
-from utils.probe_utils import (
-    load_probes_and_normalize,
-    calculate_w_in_cossim_with_probes,
-)
-from decision_trees.dtypes import DecisionTreeResults, BinaryDecisionTreeResults
 from decision_trees import dtypes
 # import decision_trees
 
@@ -42,11 +34,14 @@ t.set_grad_enabled(False)
 print(f"Using device: {device}")
 
 # %%
-model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
-model = circuits_utils.get_model(model_name, device)
+# model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
+# model = circuits_utils.get_model(model_name, device)
 
-n_layers = model.cfg.n_layers
-n_neurons = model.cfg.d_mlp
+# n_layers = model.cfg.n_layers
+# n_neurons = model.cfg.d_mlp
+
+n_layers = 8
+n_neurons = 2048
 
 # %%
 binary_decision_tree_dict = defaultdict(dict)
@@ -71,8 +66,6 @@ for layer in range(n_layers):
         except NotFittedError:
             print(f"Tree L{gt_binary.layer}N{gt_binary.neuron} is NOT fitted")
             continue
-
-binary_feature_names = create_bs_flipped_played_feature_names(320)
 
 f1_threshold = 0.7
 # binary_dt_f1_filter = {layer: [score for score in scores.values() if score >=0] for layer, scores in binary_dt_f1.items()}
@@ -104,8 +97,6 @@ for layer in range(n_layers):
         except NotFittedError:
             print(f"Tree L{layer}N{gt_reg.neuron} is NOT fitted")
             continue
-
-reg_feature_names = create_bs_flipped_played_feature_names(320)
 
 r2_threshold = 0.7
 # reg_dt_r2_filter = {layer: [score for score in scores.values() if score >=0] for layer, scores in reg_dt_r2.items()}
