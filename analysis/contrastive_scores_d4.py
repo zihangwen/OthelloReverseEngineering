@@ -13,6 +13,11 @@ import torch as t
 from sklearn.utils.validation import check_is_fitted
 from sklearn.exceptions import NotFittedError
 
+BASE_PATH = os.path.dirname(os.path.dirname(__file__))
+# sys.path.append(BASE_PATH)
+BASE_PATH = Path(BASE_PATH)
+os.chdir(BASE_PATH)
+
 import utils.circuits_utils as circuits_utils
 import utils.arena_utils as arena_utils
 from utils.feature_extraction_utils import (
@@ -54,9 +59,6 @@ sys.modules['dtypes'] = dtypes
 # )
 
 # %%
-BASE_PATH = Path("/home/zihangw/Algoverse/OthelloReverseEngineering")
-os.chdir(BASE_PATH)
-
 # device = "cuda" if t.cuda.is_available() else "cpu"
 device = "cpu"
 t.set_grad_enabled(False)
@@ -291,10 +293,10 @@ for layer in range(n_layers):
 # jac_title = "Containment of model feature in Probe features across neurons per Layer"
 # jac_output = f"contrastive_analysis_all_methods_containment.pdf"
 
-jac_metric = "jaccard_index"
-jac_ylabel = "Jaccard index"
-jac_title = "jaccard index of model feature v.s. Probe features across neurons per Layer"
-jac_output = f"contrastive_analysis_all_methods_jaccard.pdf"
+# jac_metric = "jaccard_index"
+# jac_ylabel = "Jaccard index"
+# jac_title = "jaccard index of model feature v.s. Probe features across neurons per Layer"
+# jac_output = f"contrastive_analysis_all_methods_jaccard.pdf"
 
 x = np.arange(n_layers)
 width = 0.35
@@ -302,91 +304,75 @@ width = 0.35
 fig = plt.figure(figsize=(14, 10))
 gs = fig.add_gridspec(2, 2, height_ratios=[1, 1.2])  # make bottom row a bit taller
 
-ax_r2 = fig.add_subplot(gs[0, 0])
-ax_f1 = fig.add_subplot(gs[0, 1])
-ax_jac = fig.add_subplot(gs[1, :])  # span both columns
+# ax_r2 = fig.add_subplot(gs[0, 0])
+# ax_f1 = fig.add_subplot(gs[0, 1])
+ax_contain = fig.add_subplot(gs[0, :])
+ax_jac = fig.add_subplot(gs[1, :], sharex=ax_contain)
 
+pack_list = [
+    [ax_contain, "set2_in_set1", "Score", "Containment of model feature in Probe features across neurons per Layer",],
+    [ax_jac, "jaccard_index", "Jaccard index", "jaccard index of model feature v.s. Probe features across neurons per Layer",],
+]
 
-# Left: R²
-# ax_r2.bar(x - width/2, reg_dt_r2, width, label='Regression DT R²')
-# ax_r2.bar(x + width/2, lasso_r2, width, label='Regression lasso R²')
-ax_r2.boxplot([reg_dt_r2_filter.get(l, []) for l in range(n_layers)], positions=x - width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="skyblue"), label='Regression DT R²')
-ax_r2.boxplot([lasso_r2_filter.get(l, []) for l in range(n_layers)], positions=x + width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="orange"), label='Regression lasso R²')
-ax_r2.set_xticks(x)
-ax_r2.set_xticklabels([f"layer {layer}" for layer in range(n_layers)], rotation=45)
-ax_r2.set_ylabel("R² score")
-# ax_r2.set_ylim(0, 1)
-ax_r2.set_title("R² across neurons per Layer")
-# ax_r2.legend()
+for ax, jac_metric, jac_ylabel, jac_title in pack_list:
 
-# Right: F1
-# ax_f1.bar(x - width/2, binary_dt_f1, width, label='Binary DT F1')
-# ax_f1.bar(x + width/2, ripper_f1, width, label='RIPPER F1')
-ax_f1.boxplot([binary_dt_f1_filter.get(l, []) for l in range(n_layers)], positions=x - width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="lightgreen"), label='Binary DT F1')
-ax_f1.boxplot([ripper_f1_filter.get(l, []) for l in range(n_layers)], positions=x + width/2, widths=0.3, patch_artist=True, boxprops=dict(facecolor="salmon"), label='RIPPER F1')
-ax_f1.set_xticks(x)
-ax_f1.set_xticklabels([f"layer {layer}" for layer in range(n_layers)], rotation=45)
-ax_f1.set_ylabel("F1 score")
-# ax_f1.set_ylim(0, 1)
-ax_f1.set_title("F1 across neurons per Layer")
-# ax_f1.legend()
-
-ax_jac.boxplot(
-    [
-        [info[jac_metric] for _, info in reg_dt_vs_probe_contrastive[layer].items()]
-        for layer in range(n_layers)
-    ],
-    positions=x - 3* width / 4,
-    widths=0.15,
-    patch_artist=True,
-    boxprops=dict(facecolor="skyblue"),
-    # label='Jaccard score (Regression DT vs Probe)',
-    label = "Regression DT features"
-)
-ax_jac.boxplot(
-    [
-        [info[jac_metric] for _, info in lasso_vs_probe_contrastive[layer].items()]
-        for layer in range(n_layers)
-    ],
-    positions=x - width / 4,
-    widths=0.15,
-    patch_artist=True,
-    boxprops=dict(facecolor="orange"),
-    # label='Jaccard score (Lasso vs Probe)',
-    label = "Lasso features"
-)
-ax_jac.boxplot(
-    [
-        [info[jac_metric] for _, info in binary_dt_vs_probe_contrastive[layer].items()]
-        for layer in range(n_layers)
-    ],
-    positions=x + width / 4,
-    widths=0.15,
-    patch_artist=True,
-    boxprops=dict(facecolor="lightgreen"),
-    # label='Jaccard score (Binary DT vs Probe)',
-    label = "Binary DT features"
-)
-ax_jac.boxplot(
-    [
-        [info[jac_metric] for _, info in ripper_vs_probe_contrastive[layer].items()]
-        for layer in range(n_layers)
-    ],
-    positions=x + 3 * width / 4,
-    widths=0.15,
-    patch_artist=True,
-    boxprops=dict(facecolor="salmon"),
-    # label='Jaccard score (RIPPER vs Probe)',
-    label = "RIPPER features"
-)
-ax_jac.set_xticks(x)
-ax_jac.set_xticklabels([f"layer {layer}" for layer in range(n_layers)], rotation=45)
-ax_jac.set_ylabel(jac_ylabel)
-# ax_jac.set_ylim(0, 1)
-ax_jac.set_title(jac_title)
-ax_jac.legend(loc='upper right', bbox_to_anchor=(1, 1.3))
+    ax.boxplot(
+        [
+            [info[jac_metric] for _, info in reg_dt_vs_probe_contrastive[layer].items()]
+            for layer in range(n_layers)
+        ],
+        positions=x - 3* width / 4,
+        widths=0.15,
+        patch_artist=True,
+        boxprops=dict(facecolor="skyblue"),
+        # label='Jaccard score (Regression DT vs Probe)',
+        label = "Regression DT features"
+    )
+    ax.boxplot(
+        [
+            [info[jac_metric] for _, info in lasso_vs_probe_contrastive[layer].items()]
+            for layer in range(n_layers)
+        ],
+        positions=x - width / 4,
+        widths=0.15,
+        patch_artist=True,
+        boxprops=dict(facecolor="orange"),
+        # label='Jaccard score (Lasso vs Probe)',
+        label = "Lasso features"
+    )
+    ax.boxplot(
+        [
+            [info[jac_metric] for _, info in binary_dt_vs_probe_contrastive[layer].items()]
+            for layer in range(n_layers)
+        ],
+        positions=x + width / 4,
+        widths=0.15,
+        patch_artist=True,
+        boxprops=dict(facecolor="lightgreen"),
+        # label='Jaccard score (Binary DT vs Probe)',
+        label = "Binary DT features"
+    )
+    ax.boxplot(
+        [
+            [info[jac_metric] for _, info in ripper_vs_probe_contrastive[layer].items()]
+            for layer in range(n_layers)
+        ],
+        positions=x + 3 * width / 4,
+        widths=0.15,
+        patch_artist=True,
+        boxprops=dict(facecolor="salmon"),
+        # label='Jaccard score (RIPPER vs Probe)',
+        label = "RIPPER features"
+    )
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"layer {layer}" for layer in range(n_layers)], rotation=45)
+    ax.set_ylabel(jac_ylabel)
+    # ax.set_ylim(0, 1)
+    ax.set_title(jac_title)
+    
+ax.legend(loc='upper right', bbox_to_anchor=(1, 1.3))
 plt.tight_layout()
 # plt.show()
-plt.savefig(f"figures/contrastive_analysis/{jac_output}", dpi=300, bbox_inches='tight')
+plt.savefig(f"figures/contrastive_analysis/contrastive_analysis_all_methods_both.pdf", dpi=300, bbox_inches='tight')
 
 # %%
