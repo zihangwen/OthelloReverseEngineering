@@ -22,11 +22,7 @@ import utils.circuits_utils as circuits_utils
 import utils.arena_utils as arena_utils
 from utils.feature_extraction_utils import (
     create_bs_flipped_played_feature_names,
-    extract_probe_features,
-    extract_rules_features_from_binary_dt,
-    extract_rules_features_from_reg_dt,
     aggregate_scores,
-    set_overlap_metrics,
 )
 from utils.probe_utils import (
     load_probes_and_normalize,
@@ -79,15 +75,10 @@ for layer in range(n_layers):
 binary_feature_names = create_bs_flipped_played_feature_names(320)
 
 f1_threshold = 0.7
-binary_dt_rules = extract_rules_features_from_binary_dt(
-    num_layers = n_layers,
-    num_neurons = n_neurons,
-    binary_decision_trees = binary_decision_tree_dict,
-    f1_scores = binary_dt_f1,
-    binary_feature_names = binary_feature_names,
-    f1_threshold=f1_threshold,
-)
-binary_dt_f1_filter = {layer: [score for score in scores.values() if score >=0] for layer, scores in binary_dt_f1.items()}
+# binary_dt_f1_filter = {layer: [score for score in scores.values() if score >=0] for layer, scores in binary_dt_f1.items()}
+
+binary_dt_f1_filter_dict = {layer: {neuron: score for neuron, score in scores.items() if score >= f1_threshold} for layer, scores in binary_dt_f1.items()}
+binary_dt_f1_filter = {layer: list(scores.values()) for layer, scores in binary_dt_f1_filter_dict.items()}
 
 # %%
 reg_decision_tree_dict = defaultdict(dict)
@@ -111,21 +102,16 @@ for layer in range(n_layers):
             reg_decision_tree_dict[layer][gt_reg.neuron] = gt_reg.tree
             reg_dt_r2[layer][gt_reg.neuron] = gt_reg.test_R2
         except NotFittedError:
-            print(f"Tree L{layer}N{gt_binary.neuron} is NOT fitted")
+            print(f"Tree L{layer}N{gt_reg.neuron} is NOT fitted")
             continue
 
 reg_feature_names = create_bs_flipped_played_feature_names(320)
 
 r2_threshold = 0.7
-reg_dt_rules = extract_rules_features_from_reg_dt(
-    num_layers = n_layers,
-    num_neurons = n_neurons,
-    reg_decision_trees = reg_decision_tree_dict,
-    r2_scores = reg_dt_r2,
-    reg_feature_names = reg_feature_names,
-    r2_threshold=r2_threshold,
-)
-reg_dt_r2_filter = {layer: [score for score in scores.values() if score >=0] for layer, scores in reg_dt_r2.items()}
+# reg_dt_r2_filter = {layer: [score for score in scores.values() if score >=0] for layer, scores in reg_dt_r2.items()}
+
+reg_dt_r2_filter_dict = {layer: {neuron: score for neuron, score in scores.items() if score >= r2_threshold} for layer, scores in reg_dt_r2.items()}
+reg_dt_r2_filter = {layer: list(scores.values()) for layer, scores in reg_dt_r2_filter_dict.items()}
 
 # %% ripper load
 with open(f"ripper/ripper_all_neurons_analysis.pkl", "rb") as f:

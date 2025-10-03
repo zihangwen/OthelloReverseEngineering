@@ -170,7 +170,7 @@ for layer in range(n_layers):
             reg_decision_tree_dict[layer][gt_reg.neuron] = gt_reg.tree
             reg_dt_r2[layer][gt_reg.neuron] = gt_reg.test_R2
         except NotFittedError:
-            print(f"Tree L{layer}N{gt_binary.neuron} is NOT fitted")
+            print(f"Tree L{layer}N{gt_reg.neuron} is NOT fitted")
             continue
 
 reg_feature_names = create_bs_flipped_played_feature_names(320)
