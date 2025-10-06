@@ -190,10 +190,11 @@ for i_slice, layer_slice in enumerate(tqdm(layer_slice_list)):
     })
 
 # %%
-for i, _ in enumerate(score_all):
-    score_all[i]["zero_kl_div"] = score_all[i]["zero_kl_div"].mean().item()
-    score_all[i]["dt_kl_div"] = score_all[i]["dt_kl_div"].mean().item()
-    score_all[i]["mean_kl_div"] = score_all[i]["mean_kl_div"].mean().item()
+# for i, _ in enumerate(score_all):
+#     score_all[i]["zero_kl_div"] = score_all[i]["zero_kl_div"].mean().item()
+#     score_all[i]["dt_kl_div"] = score_all[i]["dt_kl_div"].mean().item()
+#     score_all[i]["mean_kl_div"] = score_all[i]["mean_kl_div"].mean().item()
+
 # %%
 fig = plt.figure(figsize=(14, 7))
 gs = fig.add_gridspec(1, 2)
@@ -207,7 +208,8 @@ ax_acc.plot(x, [s["zero_scores"][-1] for s in score_all], marker="o", label="Zer
 ax_acc.plot(x, [s["dt_scores"][-1] for s in score_all], marker="o", label="DT Ablation")
 ax_acc.plot(x, [s["mean_scores"][-1] for s in score_all], marker="o", label="Mean Ablation")
 ax_acc.plot(x, [s["clean_scores"][-1] for s in score_all], color="black", marker="o", linestyle='--', label="Clean")
-ax_acc.axvline(x=6, color='gray', linestyle='--')
+ax_acc.axvline(x=4, color='gray', linestyle='--')
+ax_acc.axvline(x=11, color='gray', linestyle='--')
 ax_acc.set_xlabel("Layer Slice")
 ax_acc.set_ylabel("Accuracy")
 ax_acc.set_title("Ablation Accuracy by Layer Slice")
@@ -218,7 +220,9 @@ ax_acc.legend()
 ax_kl.plot(x, [s["zero_kl_div"] for s in score_all], marker="o", label="Zero Ablation")
 ax_kl.plot(x, [s["dt_kl_div"] for s in score_all], marker="o", label="DT Ablation")
 ax_kl.plot(x, [s["mean_kl_div"] for s in score_all], marker="o", label="Mean Ablation")
-ax_kl.axvline(x=6, color='gray', linestyle='--')
+ax_kl.plot(x, [0]*len(score_all), color="black", marker="o", linestyle='--', label="Clean")
+ax_kl.axvline(x=4, color='gray', linestyle='--')
+ax_kl.axvline(x=11, color='gray', linestyle='--')
 ax_kl.set_xlabel("Layer Slice")
 ax_kl.set_ylabel("KL Divergence")
 ax_kl.set_title("Ablation KL Divergence by Layer Slice")
