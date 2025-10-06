@@ -1,29 +1,30 @@
 import torch as t
 import numpy as np
 import einops
-
-# import circuits.utils as utils
-# import circuits.othello_utils as othello_utils
-# from circuits.eval_sae_as_classifier import construct_othello_dataset
+from collections import defaultdict
 
 from transformer_lens import ActivationCache, HookedTransformer
 from transformer_lens.utils import to_numpy
 from torch import Tensor
-from IPython.display import HTML, display
+# from IPython.display import HTML, display
 from jaxtyping import Bool, Float, Int
-from typing import Optional, List
+# from typing import Optional, List, Callable
+from dataclasses import dataclass
+from datasets import load_dataset
 # import matplotlib.pyplot as plt
 # from sklearn.tree import plot_tree
-import arena_utils as arena_utils
+
+import utils.arena_utils as arena_utils
 # from simulate_activations_with_dts import (
 #     compute_kl_divergence,
 #     compute_top_n_accuracy,
 # )
-from dataclasses import dataclass
+
 
 MIDDLE_SQUARES = [27, 28, 35, 36]
 ALL_SQUARES = [i for i in range(64) if i not in MIDDLE_SQUARES]
 tracer_kwargs = {"validate": True, "scan": True}
+
 
 # %%
 def get_neuron_decision_tree(data: dict, layer: int, neuron_idx: int, function_name: str):
@@ -122,13 +123,38 @@ def compute_top_n_accuracy(
     return correct.item(), total.item(), accuracy.item()
 
 # %%
+def dt_simulation_neuron_activation(
+    data: dict, decision_trees: dict, n_layer: int, n_neuron: int, func_name: str, device
+) -> dict[int, t.Tensor]:
+    board_state_BLC = data[func_name]
+    B, L, C = board_state_BLC.shape
+    X = einops.rearrange(board_state_BLC, "b l c -> (b l) c").cpu().numpy()
+
+    simulated_acts = dict()
+    for layer in range(n_layer):
+        sim_layer = []
+        for neuron in range(n_neuron):
+            decision_tree = decision_trees[layer][neuron]
+            simulated_activations_BF = decision_tree.predict(X)
+            simulated_activations_BF = t.tensor(
+                simulated_activations_BF, dtype=t.float32
+            )
+            simulated_activations_BLF = einops.rearrange(
+                simulated_activations_BF, "(b l) -> b l", b=B, l=L
+            )
+            sim_layer.append(simulated_activations_BLF)
+        simulated_acts[layer] = t.stack(sim_layer, dim=-1).to(device)  # B L neurons
+    return simulated_acts
+
+# %%
 def neuron_intervention(
     model,
     layers_neurons: dict[list],
     game_batch_BL: t.Tensor,
     ablation_method: str = "zero",
+    simulated_acts: dict = None,
 ):
-    allowed_methods = ["mean", "max", "zero"]
+    allowed_methods = ["mean", "max", "zero", "dt"]
     # allowed_methods = ["zero"]
     assert ablation_method in allowed_methods, (
         f"Invalid ablation method. Must be one of {allowed_methods}"
@@ -146,8 +172,8 @@ def neuron_intervention(
             elif ablation_method == "max":
                 # max_activations_temp = original_input_BLD.max(dim=0).values
                 max_activations[layer] = original_input_BLD.max(dim=(0, 1)).values.save()
-            elif ablation_method == "zero":
-                # No need to do anything for zero ablation, just save the original input
+            else:
+                # No need to do anything for other ablations, just save the original input
                 pass
         logits_clean_BLV = model.unembed.output.save()
     
@@ -160,6 +186,8 @@ def neuron_intervention(
                 original_input_BLD[:, :, neuron_indices] = max_activations[layer][neuron_indices]
             elif ablation_method == "zero":
                 original_input_BLD[:, :, neuron_indices] = 0.0
+            elif ablation_method == "dt":
+                original_input_BLD[:, :, neuron_indices] = simulated_acts[layer][:, :, neuron_indices]
         
         logits_patch_BLV = model.unembed.output.save()
     
@@ -217,12 +245,13 @@ def calculate_ablation_scores_square(model, layers_neurons, board_seqs_id, valid
 
     return kl_div_BL.mean().item(), clean_accuracy.item(), patch_accuracy.item()
 
-def calculate_ablation_scores_square_probability(model, layers_neurons, board_seqs_id, valid_move_square_mask, valid_move_number, token_id, ablation_method = "zero", threshold = 0.1):
+def calculate_ablation_scores_square_probability(model, layers_neurons, board_seqs_id, valid_move_square_mask, valid_move_number, token_id, ablation_method = "zero", threshold = 0.1, simulated_acts = None):
     logits_clean_BLV, logits_patch_BLV = neuron_intervention(
         model,
         layers_neurons=layers_neurons,
         game_batch_BL=board_seqs_id,
         ablation_method=ablation_method,
+        simulated_acts=simulated_acts,
     )
     valid_move_square_mask_bool = valid_move_square_mask.to(dtype=bool)
     kl_div_BL = compute_kl_divergence(logits_clean_BLV, logits_patch_BLV)

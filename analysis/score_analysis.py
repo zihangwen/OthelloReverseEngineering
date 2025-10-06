@@ -160,7 +160,7 @@ x = np.arange(n_layers)
 width = 0.35
 
 fig = plt.figure(figsize=(14, 10))
-gs = fig.add_gridspec(2, 2, height_ratios=[1, 1.2])  # make bottom row a bit taller
+gs = fig.add_gridspec(2, 2)
 
 ax_r2 = fig.add_subplot(gs[0, 0])
 ax_f1 = fig.add_subplot(gs[0, 1], sharey=ax_r2)
