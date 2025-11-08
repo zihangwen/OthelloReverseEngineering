@@ -128,10 +128,17 @@ def load_probes_and_normalize(n_layers, device):
     just_played_probe_normalized = just_played_probe / just_played_probe.norm(dim=1, keepdim=True)
     just_played_probe_normalized[..., [3, 3, 4, 4], [3, 4, 3, 4]] = 0.0
 
-    return (
-        mine_probe_normalized, empty_probe_normalized, theirs_probe_normalized,
-        flipped_probe_normalized, just_played_probe_normalized
-    )
+    return {
+        "mine": mine_probe_normalized,
+        "empty": empty_probe_normalized,
+        "theirs": theirs_probe_normalized,
+        "flipped": flipped_probe_normalized,
+        "just_played": just_played_probe_normalized,
+    }
+    # return (
+    #     mine_probe_normalized, empty_probe_normalized, theirs_probe_normalized,
+    #     flipped_probe_normalized, just_played_probe_normalized
+    # )
 
 # %%
 def load_fold_probes_and_normalize(n_layers, device):
@@ -165,10 +172,16 @@ def load_fold_probes_and_normalize(n_layers, device):
     just_played_probe_normalized = just_played_probe / just_played_probe.norm(dim=1, keepdim=True)
     just_played_probe_normalized[..., [3, 3, 4, 4], [3, 4, 3, 4]] = 0.0
 
-    return (
-        blank_probe_normalized, my_probe_normalized,
-        flipped_probe_normalized, just_played_probe_normalized
-    )
+    return {
+        "blank": blank_probe_normalized,
+        "mine": my_probe_normalized,
+        "flipped": flipped_probe_normalized,
+        "just_played": just_played_probe_normalized,
+    }
+    # return (
+    #     blank_probe_normalized, my_probe_normalized,
+    #     flipped_probe_normalized, just_played_probe_normalized
+    # )
 
 # %%
 def calculate_w_in_cossim_with_probes(
@@ -179,8 +192,11 @@ def calculate_w_in_cossim_with_probes(
     layer_offset: int = 0,
 ):
     matric_list = [
-        calculate_neuron_input_weights(model, probe[layer - layer_offset], layer, neuron) for probe in probes
+        calculate_neuron_input_weights(model, probe[layer - layer_offset], layer, neuron) for probe in probes.values()
     ]
+    # matric_list = [
+    #     calculate_neuron_input_weights(model, probe[layer - layer_offset], layer, neuron) for probe in probes
+    # ]
     matrices = t.stack(matric_list, dim=0).detach().cpu().numpy()  # [n_probes, 8, 8]
 
     return matrices

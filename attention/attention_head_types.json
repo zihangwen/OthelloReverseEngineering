@@ -1,0 +1,82 @@
+{
+    "0": {
+        "0": "Mine head",
+        "1": "Other",
+        "2": "Mine head",
+        "3": "Yours head",
+        "4": "Other",
+        "5": "Other",
+        "6": "Yours head",
+        "7": "Mine head"
+    },
+    "1": {
+        "0": "Yours head",
+        "1": "Other",
+        "2": "Mine head",
+        "3": "Mine head",
+        "4": "Yours head",
+        "5": "Yours head",
+        "6": "Yours head",
+        "7": "Other"
+    },
+    "2": {
+        "0": "Yours head",
+        "1": "Mine head",
+        "2": "Yours head",
+        "3": "Mine head",
+        "4": "Mine head",
+        "5": "Mine head",
+        "6": "Yours head",
+        "7": "Yours head"
+    },
+    "3": {
+        "0": "Yours head",
+        "1": "Mine head",
+        "2": "Mine head",
+        "3": "Mine head",
+        "4": "Mine head",
+        "5": "Mine head",
+        "6": "Mine head",
+        "7": "Mine head"
+    },
+    "4": {
+        "0": "Mine head",
+        "1": "Mine head",
+        "2": "Mine head",
+        "3": "Mine head",
+        "4": "Yours head",
+        "5": "Mine head",
+        "6": "Yours head",
+        "7": "Mine head"
+    },
+    "5": {
+        "0": "Mine head",
+        "1": "Yours head",
+        "2": "Yours head",
+        "3": "Mine head",
+        "4": "Mine head",
+        "5": "Mine head",
+        "6": "Yours head",
+        "7": "Mine head"
+    },
+    "6": {
+        "0": "Yours head",
+        "1": "Yours head",
+        "2": "Mine head",
+        "3": "Yours head",
+        "4": "Yours head",
+        "5": "Mine head",
+        "6": "Yours head",
+        "7": "Yours head"
+    },
+    "7": {
+        "0": "Yours head",
+        "1": "Yours head",
+        "2": "Yours head",
+        "3": "Yours head",
+        "4": "Yours head",
+        "5": "Mine head",
+        "6": "Other",
+        "7": "Yours head"
+    }
+}
