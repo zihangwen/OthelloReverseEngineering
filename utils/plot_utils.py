@@ -82,11 +82,13 @@ def plot_board_states(
     board_seqs_square = board_seqs_square[game_index, :move+1].unsqueeze(0) # [move, 8, 8]
 
     board_states, legal_moves, _ = get_board_states_and_legal_moves(board_seqs_square)
+
+    sqaure_label = arena_utils.to_board_label(board_seqs_square[game_index, move])
     
     fig = arena_utils.plot_board_values(
         board_states[0, move],
         width=500,
-        title=f"After move {move}, {'white' if move % 2 == 0 else 'black'} to play",
+        title=f"After move {move} ({sqaure_label}), {'white' if move % 2 == 0 else 'black'} to play",
         text=np.where(to_numpy(legal_moves[0, move]), "o", "").tolist(),
     )
 

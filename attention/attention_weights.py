@@ -97,7 +97,7 @@ n_layers = model.cfg.n_layers
 # legal_moves = legal_moves.to(device=device, dtype=t.float32)
 
 # %%
-with open("temp/attention_head_types.json", "r") as f:
+with open("attention/attention_head_types.json", "r") as f:
     head_type_all = json.load(f)
 
 # %% Loading Probes
