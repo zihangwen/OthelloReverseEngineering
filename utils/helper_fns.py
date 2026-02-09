@@ -398,7 +398,7 @@ def get_board_states_and_legal_moves(
             legal_moves[n, i].flatten()[board.get_valid_moves()] = 1
 
     # Convert legal moves to annotation
-    legal_moves_annotation = np.where(to_numpy(legal_moves), "o", "").tolist()
+    legal_moves_annotation = np.where(to_numpy(legal_moves), "o", "")
 
     return states, legal_moves, legal_moves_annotation
 

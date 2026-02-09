@@ -164,7 +164,7 @@ for layer in range(model.cfg.n_layers):
 #     json.dump(head_type_all, f, indent=4, sort_keys=True)
 
 # %%
-with open("temp/attention_head_types.json", "r") as f:
+with open("attention/attention_head_types.json", "r") as f:
     head_type_all = json.load(f)
 
 color_map = {
@@ -217,7 +217,7 @@ for layer in range(4):
         im = ax.imshow(mean_attention_pattern[head], cmap="Blues", vmin=0, vmax=1)
         ax.set_title(f"L{layer}H{head} -- {head_type}", color=color_map[head_type])
         ax.set_xlabel("src Position")
-        ax.set_ylabel("dst Position")
+        ax.set_ylabel("dst Positfion")
 
 for ax in axes.flat:
     ax.label_outer()

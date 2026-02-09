@@ -100,10 +100,9 @@ n_layers = model.cfg.n_layers
 with open("attention/attention_head_types.json", "r") as f:
     head_type_all = json.load(f)
 
-# %% Loading Probes
+# %% Loading Probes and model
 probes = load_fold_probes_and_normalize(n_layers, device)
 
-# %% writing neuron
 n_layers = model.cfg.n_layers
 n_neurons = model.cfg.d_mlp
 n_heads = model.cfg.n_heads
@@ -117,6 +116,7 @@ W_V = model.W_V.detach().clone()  # [layer, head, d_model, d_head]
 W_E = model.W_E[1:].detach().clone()  # [vocab_size, d_model]
 W_U = model.W_U[:, 1:].detach().clone()  # [d_model, 60]
 
+# %% calculating attention weight circuits
 # W_OV: a linear map describing what information gets moved from source to destination, in the residual stream.
 # In other words, if x is a vector in the residual stream, then x^T*W_OV is the vector written to the residual stream at the destination position, if the destination token only pays attention to the source token at the position of the vector x.
 W_OV = einops.einsum(

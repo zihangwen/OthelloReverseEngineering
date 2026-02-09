@@ -83,7 +83,7 @@ def plot_board_states(
 
     board_states, legal_moves, _ = get_board_states_and_legal_moves(board_seqs_square)
 
-    sqaure_label = arena_utils.to_board_label(board_seqs_square[game_index, move])
+    sqaure_label = arena_utils.to_board_label(board_seqs_square[0, move])
     
     fig = arena_utils.plot_board_values(
         board_states[0, move],

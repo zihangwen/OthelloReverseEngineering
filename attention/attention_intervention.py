@@ -1,0 +1,197 @@
+# %%
+import pickle
+import json
+from pathlib import Path
+from collections import defaultdict
+import torch as t
+import numpy as np
+import einops
+from rich import print as rprint
+from rich.table import Column, Table
+from rich.console import Console
+from rich.terminal_theme import MONOKAI
+import os
+
+from IPython.display import HTML, display
+# from sklearn.tree import plot_tree
+import matplotlib.pyplot as plt
+from sklearn.tree import plot_tree
+from sklearn.tree import export_graphviz
+from skimage.filters import threshold_otsu
+import graphviz
+
+BASE_PATH = os.path.dirname(os.path.dirname(__file__))
+# sys.path.append(BASE_PATH)
+BASE_PATH = Path(BASE_PATH)
+os.chdir(BASE_PATH)
+
+from transformer_lens.utils import to_numpy
+import transformer_lens
+import circuitsvis as cv
+# from transformer_lens.utils import to_numpy, get_act_name
+# from transformer_lens import ActivationCache, HookedTransformer
+# from torch import Tensor
+# from IPython.display import HTML, display
+# from jaxtyping import Bool, Float, Int
+
+import utils.circuits_utils as circuits_utils
+from utils.arena_utils import (
+    label_to_square,
+)
+import utils.othello_utils as othello_utils
+from utils.probe_utils import (
+    # load_probes_and_normalize,
+    load_fold_probes_and_normalize,
+)
+import utils.arena_utils as arena_utils
+from utils.helper_fns import (
+    get_board_states_and_legal_moves,
+    compute_top_n_accuracy,
+    compute_kl_divergence,
+)
+#     # MIDDLE_SQUARES,
+#     neuron_intervention,
+#     ALL_SQUARES,
+#     
+#     calculate_ablation_scores_game_move,
+#     calculate_ablation_scores_square,
+#     calculate_ablation_scores_square_probability,
+#     # plot_probe_outputs,
+#     get_w_in,
+#     # get_w_out,
+#     calculate_neuron_input_weights,
+#     calculate_neuron_output_weights,
+#     create_feature_names,
+#     get_neuron_decision_tree,
+#     get_neuron_binary_decision_tree,
+#     # visualize_decision_tree,
+# )
+# from simulate_activations_with_dts import (
+#     compute_kl_divergence,
+#     compute_top_n_accuracy,
+# )
+
+device = "cuda:1" if t.cuda.is_available() else "cpu"
+t.set_grad_enabled(False)
+
+print(f"Using device: {device}")
+
+# %%
+model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
+model = circuits_utils.get_model(model_name, device)
+n_layers = model.cfg.n_layers
+
+# W_Q = model.W_Q.detach().clone()  # [layer, head, d_model, d_head]
+# W_K = model.W_K.detach().clone()  # [layer, head, d_model, d_head]
+W_O = model.W_O.detach().clone()  # [layer, head, d_head, d_model]
+W_V = model.W_V.detach().clone()  # [layer, head, d_model, d_head]
+
+# W_E = model.W_E[1:].detach().clone()  # [vocab_size, d_model]
+# W_U = model.W_U[:, 1:].detach().clone()  # [d_model, 60]
+
+# %%
+probes = load_fold_probes_and_normalize(n_layers, device)
+
+probe_layer_specific = {
+    name: probes[name][5]
+    for name in probes.keys()
+}
+probe_layer_normalized = {
+    name: probes[name] / probes[name].norm(dim=1, keepdim=True)
+    for name in probes.keys()
+}
+
+# %%
+# with open("attention/attention_head_types.json", "r") as f:
+#     head_type_all = json.load(f)
+
+# %% Load the test dataset and process
+test_size = 500
+custom_functions = [
+    # othello_utils.games_batch_to_input_tokens_flipped_bs_classifier_input_BLC,
+    # othello_utils.games_batch_to_input_tokens_flipped_pbs_classifier_input_BLC,
+    othello_utils.games_batch_to_valid_moves_BLRRC, # (legal move)
+]
+test_data = circuits_utils.construct_othello_dataset(
+    custom_functions=custom_functions,
+    n_inputs=test_size,
+    split="test", 
+    device=device,
+)
+
+board_seqs_id = t.tensor(test_data["encoded_inputs"]).long().to(device)
+
+# game_idx = 0
+# n_moves = 9
+# # n_layers_selected = 4
+# # move_idx = 8
+# # board_seqs_id = board_seqs_id[0, :20]
+# board_seqs_id = board_seqs_id[game_idx, :n_moves]
+
+# %%
+# Normalize and collect
+dirs = []
+for key in ["flipped", "just_played", "mine"]:
+    d = probe_layer_specific[key]                      # (d_model, 8, 8)
+    d = d / d.norm(dim=0, keepdim=True)                # normalize each vector
+    dirs.append(d)
+
+# Stack: (2, d_model, 8, 8)
+D = t.stack(dirs, dim=0)
+
+# Flatten everything except d_model
+D = D.reshape(-1, D.shape[1]).T                        # (d_model, 128)
+D = t.nan_to_num(D)
+
+# %%
+# v_values_list = []
+# hook_norm_list = []
+with t.no_grad(), model.trace(board_seqs_id):
+    logits_clean_BLV = model.unembed.output.save()
+
+with t.no_grad(), model.trace(board_seqs_id):
+    # for layer in range(1, model.cfg.n_layers):
+    for layer in range(0, 1):
+        pattern = model.blocks[layer].attn.hook_pattern.output  # (batch, heads, seq_len, seq_len)
+        hook_norm = model.blocks[layer].ln1.hook_normalized.output  # (batch, seq_len, d_model)
+
+        x = hook_norm
+
+        # Solve min || D c − x ||²
+        # torch.linalg.lstsq expects (..., m, n) @ (..., n, k)
+        c = t.linalg.lstsq(D, x.reshape(-1, x.shape[-1]).T).solution
+        # c: (128, batch*seq)
+
+        # Reconstruct projected x
+        x_proj = (D @ c).T.reshape_as(x)
+        new_v = einops.einsum(
+            x_proj, W_V[layer],
+            "batch seq d_model, head d_model d_head -> batch seq head d_head"
+        ) + model.b_V[layer]
+
+        new_v = t.nan_to_num(new_v)
+
+        v = model.blocks[layer].attn.hook_v.output
+        v[:] = new_v
+
+    logits_patch_BLV = model.unembed.output.save()
+
+# %%
+kl_div_BL = compute_kl_divergence(logits_clean_BLV, logits_patch_BLV)
+valid_moves_BLRRC = test_data["games_batch_to_valid_moves_BLRRC"]  # (seq_len, 60)
+
+clean_accuracy = compute_top_n_accuracy(logits_clean_BLV, valid_moves_BLRRC)
+patch_accuracy = compute_top_n_accuracy(logits_patch_BLV, valid_moves_BLRRC)
+
+# %% Draw a table
+table = Table(title="Attention Head Intervention Results", show_lines=True)
+table.add_column("Metric", style="bold cyan", no_wrap=True)
+table.add_column("Before Intervention", style="magenta")
+table.add_column("After Intervention", style="green")
+table.add_row("Accuracy", f"{clean_accuracy[-1]*100:.2f}%", f"{patch_accuracy[-1]*100:.2f}%")
+# KL divergence between before and after
+table.add_row("KL Divergence", f"-", f"{kl_div_BL.mean():.4f}")
+console = Console(record=True)
+console.print(table)
+
+# %%
