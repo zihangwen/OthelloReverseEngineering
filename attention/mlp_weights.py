@@ -233,22 +233,19 @@ for i_k, idx in enumerate(topk_neuron_idx):
     topk_neurons_seperate[i_k] = [layer.item(), neuron.item()]
 
 # %%
+probe_list = ["blank", "mine", "flipped", "just_played"]
 for i_k, (layer, neuron) in topk_neurons_seperate.items():
     if i_k >= 5:
         break
 
     temp = [
         [
-            calculate_neuron_input_weights(model, probe_layer_normalized["blank"][layer], layer, neuron).numpy(),
-            calculate_neuron_input_weights(model, probe_layer_normalized["mine"][layer], layer, neuron).numpy(),
-            calculate_neuron_input_weights(model, probe_layer_normalized["flipped"][layer], layer, neuron).numpy(),
-            calculate_neuron_input_weights(model, probe_layer_normalized["just_played"][layer], layer, neuron).numpy(),
+            calculate_neuron_input_weights(model, probe_layer_normalized[probe_select][layer], layer, neuron).cpu().numpy()
+            for probe_select in probe_list
         ],
         [
-            calculate_neuron_output_weights(model, probe_layer_normalized["blank"][layer], layer, neuron).numpy(),
-            calculate_neuron_output_weights(model, probe_layer_normalized["mine"][layer], layer, neuron).numpy(),
-            calculate_neuron_output_weights(model, probe_layer_normalized["flipped"][layer], layer, neuron).numpy(),
-            calculate_neuron_output_weights(model, probe_layer_normalized["just_played"][layer], layer, neuron).numpy(),
+            calculate_neuron_output_weights(model, probe_layer_normalized[probe_select][layer], layer, neuron).cpu().numpy()
+            for probe_select in probe_list
         ]
     ]
     vmin = np.nanmin(temp)
@@ -257,7 +254,7 @@ for i_k, (layer, neuron) in topk_neurons_seperate.items():
     vmin = -v_abs
     vmax = v_abs
 
-    fig, axs = plt.subplots(2, 4, figsize=(3*4, 3*2+1.5))
+    fig, axs = plt.subplots(2, 4, figsize=(3*4, 3*2+1))
     fig.suptitle(f"(Rank {i_k}: L{layer}N{neuron}) MLP Weights Projection for square {square_label}", fontsize=16)
     
     for i, weight in enumerate(["w_in", "w_out"]):

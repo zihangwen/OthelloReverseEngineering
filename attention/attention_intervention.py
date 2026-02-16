@@ -144,53 +144,66 @@ D = D.reshape(-1, D.shape[1]).T                        # (d_model, 128)
 D = t.nan_to_num(D)
 
 # %%
+layers_chosen = [
+    (0, 0),
+    (0, 7),
+    (1, 5),
+    (1, 7),
+]
 # v_values_list = []
 # hook_norm_list = []
-with t.no_grad(), model.trace(board_seqs_id):
-    logits_clean_BLV = model.unembed.output.save()
-
-with t.no_grad(), model.trace(board_seqs_id):
-    # for layer in range(1, model.cfg.n_layers):
-    for layer in range(0, 1):
-        pattern = model.blocks[layer].attn.hook_pattern.output  # (batch, heads, seq_len, seq_len)
-        hook_norm = model.blocks[layer].ln1.hook_normalized.output  # (batch, seq_len, d_model)
-
-        x = hook_norm
-
-        # Solve min || D c − x ||²
-        # torch.linalg.lstsq expects (..., m, n) @ (..., n, k)
-        c = t.linalg.lstsq(D, x.reshape(-1, x.shape[-1]).T).solution
-        # c: (128, batch*seq)
-
-        # Reconstruct projected x
-        x_proj = (D @ c).T.reshape_as(x)
-        new_v = einops.einsum(
-            x_proj, W_V[layer],
-            "batch seq d_model, head d_model d_head -> batch seq head d_head"
-        ) + model.b_V[layer]
-
-        new_v = t.nan_to_num(new_v)
-
-        v = model.blocks[layer].attn.hook_v.output
-        v[:] = new_v
-
-    logits_patch_BLV = model.unembed.output.save()
-
-# %%
-kl_div_BL = compute_kl_divergence(logits_clean_BLV, logits_patch_BLV)
 valid_moves_BLRRC = test_data["games_batch_to_valid_moves_BLRRC"]  # (seq_len, 60)
 
+with t.no_grad(), model.trace(board_seqs_id):
+    logits_clean_BLV = model.unembed.output.save()
 clean_accuracy = compute_top_n_accuracy(logits_clean_BLV, valid_moves_BLRRC)
-patch_accuracy = compute_top_n_accuracy(logits_patch_BLV, valid_moves_BLRRC)
+
+patch_accuracy_dict = {}
+kl_div_BL_dict = {}
+for layer_f, layer_t in layers_chosen:
+    with t.no_grad(), model.trace(board_seqs_id):
+        # for layer in range(1, model.cfg.n_layers):
+        for layer in range(layer_f, layer_t+1):
+            pattern = model.blocks[layer].attn.hook_pattern.output  # (batch, heads, seq_len, seq_len)
+            hook_norm = model.blocks[layer].ln1.hook_normalized.output  # (batch, seq_len, d_model)
+
+            x = hook_norm
+
+            # Solve min || D c − x ||²
+            # torch.linalg.lstsq expects (..., m, n) @ (..., n, k)
+            c = t.linalg.lstsq(D, x.reshape(-1, x.shape[-1]).T).solution
+            # c: (128, batch*seq)
+
+            # Reconstruct projected x
+            x_proj = (D @ c).T.reshape_as(x)
+            new_v = einops.einsum(
+                x_proj, W_V[layer],
+                "batch seq d_model, head d_model d_head -> batch seq head d_head"
+            ) + model.b_V[layer]
+
+            new_v = t.nan_to_num(new_v)
+
+            v = model.blocks[layer].attn.hook_v.output
+            v[:] = new_v
+
+        logits_patch_BLV = model.unembed.output.save()
+
+    patch_accuracy = compute_top_n_accuracy(logits_patch_BLV, valid_moves_BLRRC)
+    kl_div_BL = compute_kl_divergence(logits_clean_BLV, logits_patch_BLV)
+
+    patch_accuracy_dict[(layer_f, layer_t)] = patch_accuracy
+    kl_div_BL_dict[(layer_f, layer_t)] = kl_div_BL
 
 # %% Draw a table
-table = Table(title="Attention Head Intervention Results", show_lines=True)
-table.add_column("Metric", style="bold cyan", no_wrap=True)
-table.add_column("Before Intervention", style="magenta")
-table.add_column("After Intervention", style="green")
-table.add_row("Accuracy", f"{clean_accuracy[-1]*100:.2f}%", f"{patch_accuracy[-1]*100:.2f}%")
-# KL divergence between before and after
-table.add_row("KL Divergence", f"-", f"{kl_div_BL.mean():.4f}")
+table = Table(title=f"Attention Head Intervention Results\n(Accuracy before intervention: {clean_accuracy[-1]*100:.2f}%)", show_lines=True)
+table.add_column("Intervention layers", style="bold cyan", no_wrap=True)
+table.add_column("Accuracy", style="light_green", justify="right")
+table.add_column("KL Divergence", style="green", justify="right")
+for (layer_f, layer_t) in layers_chosen:
+    patch_accuracy = patch_accuracy_dict[(layer_f, layer_t)]
+    kl_div_BL = kl_div_BL_dict[(layer_f, layer_t)]
+    table.add_row(f"L{layer_f}-L{layer_t}", f"{patch_accuracy[-1]*100:.2f}%", f"{kl_div_BL.mean():.4f}")
+
 console = Console(record=True)
 console.print(table)
 

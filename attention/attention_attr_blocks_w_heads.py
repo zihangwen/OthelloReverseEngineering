@@ -219,7 +219,7 @@ num_heads_types = len(head_types)
 
 # %% Plot attention attribution per src move to dst move @ mine probe for a particular layer and all head types
 mine_probe_proj = probe_projs["mine"]
-layer_chosen = 1
+layer_chosen = 5
 
 fig, axs = plt.subplots(num_heads_types+1, n_moves, figsize=(3*n_moves, 3*(num_heads_types+1)+1.5))
 fig.suptitle(f"Attention attribution per src move to dst {n_moves-1} move @ Mine Probe", fontsize=16)

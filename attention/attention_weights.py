@@ -241,6 +241,7 @@ color_map = {
     "Other": "gray",
 }
 
+all_cos_sims_dict = {}
 for probe_name1, probe_name2 in probe_name_pair:
     n_layer_select = 4
     n_heads = model.cfg.n_heads
@@ -289,6 +290,8 @@ for probe_name1, probe_name2 in probe_name_pair:
             ax.set_yticks(range(8))
             ax.set_yticklabels(list("ABCDEFGH"))
     
+    all_cos_sims_dict[f"{probe_name1}_to_{probe_name2}"] = all_cos_sims
+
     # Add one large colorbar on the right
     fig.subplots_adjust(right=0.92)
     cbar_ax = fig.add_axes([0.94, 0.15, 0.02, 0.7])  # [left, bottom, width, height]
@@ -296,5 +299,86 @@ for probe_name1, probe_name2 in probe_name_pair:
     
     plt.tight_layout(rect=[0, 0.03, 0.92, 0.95])
     plt.show()
+
+# %%
+# from skimage.filters import threshold_otsu
+# tau_dict = {}
+tau = 0.1
+scores_dict = {}
+for probe_name1, probe_name2 in probe_name_pair:
+    all_cos_sims = all_cos_sims_dict[f"{probe_name1}_to_{probe_name2}"]
+    # tau_values = []
+    scores_values = []
+    for cos_sim in all_cos_sims:
+        # Flatten and remove NaNs
+        cos_sim_flat = cos_sim.flatten()
+
+        # fixed thresholding tau
+        scores_values.append([
+            (cos_sim_flat > tau).mean().item(),  # proportion above threshold
+            (np.abs(cos_sim_flat) <= tau).mean().item(), # proportion within threshold
+            (cos_sim_flat < -tau).mean().item(), # proportion below negative threshold
+        ])
+
+        # # Consider only absolute values for thresholding with OTSU
+        # cos_sim_flat_abs = np.abs(cos_sim_flat[~np.isnan(cos_sim_flat)])
+        
+        # # otsu thresholding
+        # if len(cos_sim_flat_abs) > 0:
+        #     tau = threshold_otsu(cos_sim_flat_abs)
+        # else:
+        #     tau = 0.0  # default value if no valid data
+        
+        # tau_values.append(tau)
+        # scores_values.append([
+        #     (cos_sim_flat > tau).mean(),  # proportion above threshold
+        #     (cos_sim_flat < -tau).mean(), # proportion below negative threshold
+        #     (np.abs(cos_sim_flat) <= tau).mean(),
+        # ])
+        
+    # tau_dict[f"{probe_name1}_to_{probe_name2}"] = tau_values
+    scores_dict[f"{probe_name1}_to_{probe_name2}"] = scores_values
+
+# %% table of scores for one pair and with rows by layer and columns by head (colored by head type)
+from rich.theme import Theme
+
+# Optional: define a light theme
+light_theme = Theme({
+    "header": "bold black",
+    "layer": "bold black",
+    "blue": "blue",
+    "gray": "dim black",
+    "red": "red",
+})
+
+probe_name1, probe_name2 = probe_name_pair[2]
+scores_values = scores_dict[f"{probe_name1}_to_{probe_name2}"]
+console = Console(theme=light_theme, record=True)
+
+table = Table(title=f"Cosine Similarity Score for {probe_name1} to {probe_name2} with tau={tau}", show_lines=True, show_header=False)
+# table.add_column("Layer\\Head", style="bold cyan", no_wrap=True)
+# for head in range(n_heads):
+#     table.add_column(f"H{head}", style="magenta")
+for layer in range(n_layer_select):
+    # row = [f"L{layer}"]
+    row = []
+    for head in range(n_heads):
+        idx = layer * n_heads + head
+        s0, s1, s2 = scores_values[idx]  # assumes a 3-tuple/list of floats
+
+        head_type = head_type_all[str(layer)][str(head)]
+        head_color = color_map[head_type]
+
+        cell = (
+            f"[{head_color}]L{layer}H{head}[/{head_color}]:\n"
+            f"  [blue]{s0*100:.1f}%[/blue]\n"
+            f"  [gray]{s1*100:.1f}%[/gray]\n"
+            f"  [red]{s2*100:.1f}%[/red]"
+        )
+        row.append(cell)
+
+    table.add_row(*row)
+
+console.print(table)
 
 # %%

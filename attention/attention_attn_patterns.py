@@ -109,7 +109,7 @@ with t.no_grad(), model.trace(board_seqs_id):
 #     names_filter=lambda name: name in keys
 # )
 
-# %%
+# %% plot the attention patterns for each layer (average over games) (display with circuitsvis)
 for layer in range(model.cfg.n_layers):
     # attention_pattern = cache["pattern", layer]
     attention_pattern = pattern_list[layer].value
@@ -173,7 +173,7 @@ color_map = {
     "Other": "gray",
 }
 
-# %%
+# %% per layer plot of attention patterns for each head (heatmap)
 n_heads = model.cfg.n_heads
 for layer in range(model.cfg.n_layers):
     attention_pattern = pattern_list[layer].value
@@ -202,7 +202,7 @@ for layer in range(model.cfg.n_layers):
     plt.show()
     # plt.close()
 
-# %%
+# %% plot all layers and heads together
 fig, axes = plt.subplots(4, 8, figsize=(16, 8), sharex=True, sharey=True)  # Adjust based on n_heads
 # axes = axes.flatten()
 n_heads = model.cfg.n_heads
@@ -217,7 +217,35 @@ for layer in range(4):
         im = ax.imshow(mean_attention_pattern[head], cmap="Blues", vmin=0, vmax=1)
         ax.set_title(f"L{layer}H{head} -- {head_type}", color=color_map[head_type])
         ax.set_xlabel("src Position")
-        ax.set_ylabel("dst Positfion")
+        ax.set_ylabel("dst Position")
+
+for ax in axes.flat:
+    ax.label_outer()
+    #plt.colorbar(im, ax=axes)
+    # plt.suptitle(f"Layer {layer} Attention Patterns")
+
+# color bar 0 to 1
+fig.subplots_adjust(right=0.92)
+cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])  # [left, bottom, width, height]
+fig.colorbar(im, cax=cbar_ax)
+
+plt.tight_layout(rect=[0, 0.03, 0.92, 0.95])
+plt.show()
+
+# %% plot of standard deviation across games for all layers and heads together
+fig, axes = plt.subplots(4, 8, figsize=(16, 8), sharex=True, sharey=True)  # Adjust based on n_heads
+# axes = axes.flatten()
+n_heads = model.cfg.n_heads
+for layer in range(4):
+    attention_pattern = pattern_list[layer].value
+    std_attention_pattern = attention_pattern.std(dim=0).numpy()
+    for head in range(n_heads):
+        ax = axes[layer, head]
+        head_type = head_type_all[str(layer)][str(head)]
+        im = ax.imshow(std_attention_pattern[head], cmap="Blues", vmin=0, vmax=1)
+        ax.set_title(f"L{layer}H{head} -- {head_type}", color=color_map[head_type])
+        ax.set_xlabel("src Position")
+        ax.set_ylabel("dst Position")
 
 for ax in axes.flat:
     ax.label_outer()
@@ -227,5 +255,34 @@ for ax in axes.flat:
 plt.tight_layout()
 plt.show()
 
+# %% table of standard deviation across games for all layers and heads together
+n_heads = model.cfg.n_heads
+n_layer_select = 4
+std_all = dict()
+for layer in range(n_layer_select):
+    attention_pattern = pattern_list[layer].value
+    std_all[layer] = attention_pattern.std(dim=0).mean(dim=(1,2)).numpy()
+
+from rich.theme import Theme
+light_theme = Theme({
+    "header": "bold black",
+    "layer": "bold black",
+    "blue": "blue",
+    "gray": "dim black",
+    "red": "red",
+})
+console = Console(theme=light_theme, record=True)
+table = Table(title="Attention Pattern Standard Deviation Across Games an", show_lines=True, show_header=False)
+for layer in range(n_layer_select):
+    # row = [f"L{layer}"]
+    row = []
+    for head in range(n_heads):
+        head_type = head_type_all[str(layer)][str(head)]
+        head_color = color_map[head_type]
+        row.append(f"[{head_color}]L{layer}H{head}: {std_all[layer][head]:.3f}[/{head_color}]")
+        
+    table.add_row(*row)
+
+console.print(table)
 
 # %%
