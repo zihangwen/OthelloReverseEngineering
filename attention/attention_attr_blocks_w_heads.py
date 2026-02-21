@@ -326,7 +326,7 @@ print(
     )).max()
 )
 
-# %%
+# %% depracted
     # temp = [
     #     probe_projs_blocks[probe_name][layer][head_type]
     #     for layer in range(n_layers)
@@ -354,7 +354,7 @@ print(
     # plt.tight_layout(rect=[0, 0.03, 0.92, 0.95])
     # plt.show()
 
-# %%
+# %% depracted
 # fig, axs = plt.subplots(n_layers_selected+1, n_moves, figsize=(3*n_moves, 3*(n_layers_selected+1)+1.5))
 # fig.suptitle(f"Attention attribution per key move to query {n_moves-1} move @ Mine Probe", fontsize=16)
 

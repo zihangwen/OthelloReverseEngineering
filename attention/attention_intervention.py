@@ -129,45 +129,20 @@ board_seqs_id = t.tensor(test_data["encoded_inputs"]).long().to(device)
 # board_seqs_id = board_seqs_id[game_idx, :n_moves]
 
 # %%
-# Normalize and collect
-dirs = []
-for key in ["flipped", "just_played", "mine"]:
-    d = probe_layer_specific[key]                      # (d_model, 8, 8)
-    d = d / d.norm(dim=0, keepdim=True)                # normalize each vector
-    dirs.append(d)
-
-# Stack: (2, d_model, 8, 8)
-D = t.stack(dirs, dim=0)
-
-# Flatten everything except d_model
-D = D.reshape(-1, D.shape[1]).T                        # (d_model, 128)
-D = t.nan_to_num(D)
-
-# %%
-layers_chosen = [
-    (0, 0),
-    (0, 7),
-    (1, 5),
-    (1, 7),
-]
-# v_values_list = []
-# hook_norm_list = []
-valid_moves_BLRRC = test_data["games_batch_to_valid_moves_BLRRC"]  # (seq_len, 60)
-
-with t.no_grad(), model.trace(board_seqs_id):
-    logits_clean_BLV = model.unembed.output.save()
-clean_accuracy = compute_top_n_accuracy(logits_clean_BLV, valid_moves_BLRRC)
-
-patch_accuracy_dict = {}
-kl_div_BL_dict = {}
-for layer_f, layer_t in layers_chosen:
+def intervention_Direction(D_space, layers, tag):
     with t.no_grad(), model.trace(board_seqs_id):
         # for layer in range(1, model.cfg.n_layers):
-        for layer in range(layer_f, layer_t+1):
-            pattern = model.blocks[layer].attn.hook_pattern.output  # (batch, heads, seq_len, seq_len)
+        for layer in layers:
+            # layer-specific D
+            if isinstance(D_space, dict):
+                D = D_space[layer]
+            else:
+                D = D_space  # (d_model, x) where x is the number of directions stacked together
+
+            # pattern = model.blocks[layer].attn.hook_pattern.output  # (batch, heads, seq_len, seq_len)
             hook_norm = model.blocks[layer].ln1.hook_normalized.output  # (batch, seq_len, d_model)
 
-            x = hook_norm
+            x = hook_norm.save()
 
             # Solve min || D c − x ||²
             # torch.linalg.lstsq expects (..., m, n) @ (..., n, k)
@@ -176,10 +151,19 @@ for layer_f, layer_t in layers_chosen:
 
             # Reconstruct projected x
             x_proj = (D @ c).T.reshape_as(x)
-            new_v = einops.einsum(
-                x_proj, W_V[layer],
-                "batch seq d_model, head d_model d_head -> batch seq head d_head"
-            ) + model.b_V[layer]
+
+            # remove x_proj components in the direction of the original x
+            if tag == "remove_proj":
+                new_v = einops.einsum(
+                    x - x_proj, W_V[layer],
+                    "batch seq d_model, head d_model d_head -> batch seq head d_head"
+                ) + model.b_V[layer]
+            else:
+                # keep only x_proj components in the direction of the original x
+                new_v = einops.einsum(
+                    x_proj, W_V[layer],
+                    "batch seq d_model, head d_model d_head -> batch seq head d_head"
+                ) + model.b_V[layer]
 
             new_v = t.nan_to_num(new_v)
 
@@ -188,21 +172,122 @@ for layer_f, layer_t in layers_chosen:
 
         logits_patch_BLV = model.unembed.output.save()
 
+    return logits_patch_BLV
+
+# %%
+layers_chosen = [
+    (0,),
+    (0, 1, 2, 3, 4, 5, 6, 7),
+    (1, 2, 3, 4, 5,),
+    (1, 2, 3, 4, 5, 6, 7),
+]
+# tag = "remove_proj"
+tag = "keep_proj"
+# v_values_list = []
+# hook_norm_list = []
+valid_moves_BLRRC = test_data["games_batch_to_valid_moves_BLRRC"]  # (seq_len, 60)
+
+with t.no_grad(), model.trace(board_seqs_id):
+    logits_clean_BLV = model.unembed.output.save()
+clean_accuracy = compute_top_n_accuracy(logits_clean_BLV, valid_moves_BLRRC)
+
+
+# %%
+# # Normalize and collect specific layer (e.g., layer 5) for all probes
+dirs = []
+for key in ["flipped", "just_played", "mine"]:
+    d = probe_layer_specific[key]                      # (d_model, 8, 8)
+    d = d / d.norm(dim=0, keepdim=True)                # normalize each vector
+    dirs.append(d)
+
+# Stack: (num_probs, d_model, 8, 8)
+D = t.stack(dirs, dim=0)
+
+# Flatten everything except d_model
+D = D.reshape(-1, D.shape[1]).T                        # (d_model, 128)
+D = t.nan_to_num(D)
+
+# Normalize and collect
+# dir_dict = defaultdict(list)
+# for key in ["flipped", "just_played", "mine"]:
+#     d = probes[key]                      # (head, d_model, 8, 8)
+#     d = d / d.norm(dim=1, keepdim=True)                # normalize each vector
+#     for layer in range(n_layers):
+#         dir_dict[layer].append(d[layer])  # (d_model, 8, 8)
+
+# D_dict = {}
+# for layer in range(n_layers):
+# # Stack: (num_probs, d_model, 8, 8)
+#     D = t.stack(dir_dict[layer], dim=0)
+
+#     # Flatten everything except d_model
+#     D = D.reshape(-1, D.shape[1]).T                        # (d_model, 128)
+#     D = t.nan_to_num(D)
+#     D_dict[layer] = D
+
+patch_accuracy_dict = {}
+kl_div_BL_dict = {}
+for layers in layers_chosen:
+    logits_patch_BLV = intervention_Direction(D, layers, tag)
+
     patch_accuracy = compute_top_n_accuracy(logits_patch_BLV, valid_moves_BLRRC)
     kl_div_BL = compute_kl_divergence(logits_clean_BLV, logits_patch_BLV)
 
-    patch_accuracy_dict[(layer_f, layer_t)] = patch_accuracy
-    kl_div_BL_dict[(layer_f, layer_t)] = kl_div_BL
+    patch_accuracy_dict[layers] = patch_accuracy
+    kl_div_BL_dict[layers] = kl_div_BL
+
+# %% random direction control
+# seed 42
+t.manual_seed(42)
+random_D = t.randn_like(D)
+random_D = random_D / random_D.norm(dim=0, keepdim=True)
+
+random_patch_accuracy_dict = {}
+random_kl_div_BL_dict = {}
+for layers in layers_chosen:
+    logits_random_patch_BLV = intervention_Direction(random_D, layers, tag)
+
+    random_patch_accuracy = compute_top_n_accuracy(logits_random_patch_BLV, valid_moves_BLRRC)
+    random_kl_div_BL = compute_kl_divergence(logits_clean_BLV, logits_random_patch_BLV)
+
+    random_patch_accuracy_dict[layers] = random_patch_accuracy
+    random_kl_div_BL_dict[layers] = random_kl_div_BL
+
+# %% zero direction control
+zero_D = t.zeros_like(D)
+zero_patch_accuracy_dict = {}
+zero_kl_div_BL_dict = {}
+for layers in layers_chosen:
+    logits_zero_patch_BLV = intervention_Direction(zero_D, layers, tag)
+
+    zero_patch_accuracy = compute_top_n_accuracy(logits_zero_patch_BLV, valid_moves_BLRRC)
+    zero_kl_div_BL = compute_kl_divergence(logits_clean_BLV, logits_zero_patch_BLV)
+
+    zero_patch_accuracy_dict[layers] = zero_patch_accuracy
+    zero_kl_div_BL_dict[layers] = zero_kl_div_BL
 
 # %% Draw a table
 table = Table(title=f"Attention Head Intervention Results\n(Accuracy before intervention: {clean_accuracy[-1]*100:.2f}%)", show_lines=True)
 table.add_column("Intervention layers", style="bold cyan", no_wrap=True)
-table.add_column("Accuracy", style="light_green", justify="right")
-table.add_column("KL Divergence", style="green", justify="right")
-for (layer_f, layer_t) in layers_chosen:
-    patch_accuracy = patch_accuracy_dict[(layer_f, layer_t)]
-    kl_div_BL = kl_div_BL_dict[(layer_f, layer_t)]
-    table.add_row(f"L{layer_f}-L{layer_t}", f"{patch_accuracy[-1]*100:.2f}%", f"{kl_div_BL.mean():.4f}")
+table.add_column("Accu.", style="light_green", justify="right")
+table.add_column("KL", style="green", justify="right")
+table.add_column("Accu. (Rand. )", style="red", justify="right")
+table.add_column("KL (Rand.)", style="red", justify="right")
+table.add_column("Accu. (Zero)", style="yellow", justify="right")
+table.add_column("KL (Zero)", style="yellow", justify="right")
+for layers in layers_chosen:
+    patch_accuracy = patch_accuracy_dict[layers]
+    kl_div_BL = kl_div_BL_dict[layers]
+    random_patch_accuracy = random_patch_accuracy_dict[layers]
+    random_kl_div_BL = random_kl_div_BL_dict[layers]
+
+    # layer_str = " ".join(f"L{l}" for l in layers)
+    table.add_row(
+        f"{" ".join(f"L{l}" for l in layers)}",
+        f"{patch_accuracy[-1]*100:.2f}%", f"{kl_div_BL.mean():.4f}",
+        f"{random_patch_accuracy[-1]*100:.2f}%", f"{random_kl_div_BL.mean():.4f}",
+        f"{zero_patch_accuracy_dict[layers][-1]*100:.2f}%", f"{zero_kl_div_BL_dict[layers].mean():.4f}",
+    )
 
 console = Console(record=True)
 console.print(table)

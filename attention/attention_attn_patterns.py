@@ -110,38 +110,39 @@ with t.no_grad(), model.trace(board_seqs_id):
 # )
 
 # %% plot the attention patterns for each layer (average over games) (display with circuitsvis)
-for layer in range(model.cfg.n_layers):
-    # attention_pattern = cache["pattern", layer]
-    attention_pattern = pattern_list[layer].value
-    mean_attention_pattern = einops.reduce(attention_pattern, "n_games head row col -> head row col", "mean")
-    display(
-        cv.attention.attention_patterns(tokens=["_"]*30, attention=mean_attention_pattern)
-    )
+# for layer in range(model.cfg.n_layers):
+#     # attention_pattern = cache["pattern", layer]
+#     attention_pattern = pattern_list[layer].value
+#     mean_attention_pattern = einops.reduce(attention_pattern, "n_games head row col -> head row col", "mean")
+#     display(
+#         cv.attention.attention_patterns(tokens=["_"]*30, attention=mean_attention_pattern)
+#     )
 
 # %%
-# def diagonal_offsets_mean(A, exclude_first_col = True):
-#     if exclude_first_col:
-#         first_col = A[...,0]
-#         first_col_mean = first_col.mean(dim=-1)
-#         A = A[...,1:,1:]
-#     else:
-#         first_col_mean = None
-#     n_rows, _ = A.shape[-2:]
-#     even_diags = []
-#     odd_diags = []
-#     for offset in range(-n_rows + 1, 1):
-#         diag = A.diagonal(offset=offset, dim1=-2, dim2=-1)
-#         if offset % 2 == 0:
-#             even_diags.append(diag)
-#         else:
-#             odd_diags.append(diag)
-#     even_diags = t.cat(even_diags, dim=-1)
-#     odd_diags = t.cat(odd_diags, dim=-1)
-#     even_mean = even_diags.mean(dim=-1)
-#     odd_mean = odd_diags.mean(dim=-1)
+def diagonal_offsets_mean(A, exclude_first_col = True):
+    if exclude_first_col:
+        first_col = A[...,0]
+        first_col_mean = first_col.mean(dim=-1)
+        A = A[...,1:,1:]
+    else:
+        first_col_mean = None
+    n_rows, _ = A.shape[-2:]
+    even_diags = []
+    odd_diags = []
+    for offset in range(-n_rows + 1, 1):
+        diag = A.diagonal(offset=offset, dim1=-2, dim2=-1)
+        if offset % 2 == 0:
+            even_diags.append(diag)
+        else:
+            odd_diags.append(diag)
+    even_diags = t.cat(even_diags, dim=-1)
+    odd_diags = t.cat(odd_diags, dim=-1)
+    even_mean = even_diags.mean(dim=-1)
+    odd_mean = odd_diags.mean(dim=-1)
     
-#     return even_mean, odd_mean, first_col_mean
+    return even_mean, odd_mean, first_col_mean
 
+# %%
 # head_type_all = defaultdict(dict)
 # for layer in range(model.cfg.n_layers):
 #     attention_pattern = pattern_list[layer].value
@@ -174,33 +175,33 @@ color_map = {
 }
 
 # %% per layer plot of attention patterns for each head (heatmap)
-n_heads = model.cfg.n_heads
-for layer in range(model.cfg.n_layers):
-    attention_pattern = pattern_list[layer].value
-    mean_attention_pattern = einops.reduce(
-        attention_pattern, "n_games head row col -> head row col", "mean"
-    ).numpy()
-    # mean_attention_pattern = attention_pattern[0]
+# n_heads = model.cfg.n_heads
+# for layer in range(model.cfg.n_layers):
+#     attention_pattern = pattern_list[layer].value
+#     mean_attention_pattern = einops.reduce(
+#         attention_pattern, "n_games head row col -> head row col", "mean"
+#     ).numpy()
+#     # mean_attention_pattern = attention_pattern[0]
 
-    # Create figure with subplots for each head
-    fig, axes = plt.subplots(2, 4, figsize=(16, 8))  # Adjust based on n_heads
-    axes = axes.flatten()
+#     # Create figure with subplots for each head
+#     fig, axes = plt.subplots(2, 4, figsize=(16, 8))  # Adjust based on n_heads
+#     axes = axes.flatten()
 
-    for head in range(n_heads):
-        ax = axes[head]
-        im = ax.imshow(mean_attention_pattern[head], cmap="Blues", vmin=0, vmax=1)
-        ax.set_title(f"Head {head}")
-        ax.set_xlabel("src Position")
-        ax.set_ylabel("dst Position")
+#     for head in range(n_heads):
+#         ax = axes[head]
+#         im = ax.imshow(mean_attention_pattern[head], cmap="Blues", vmin=0, vmax=1)
+#         ax.set_title(f"Head {head}")
+#         ax.set_xlabel("src Position")
+#         ax.set_ylabel("dst Position")
 
-    #plt.colorbar(im, ax=axes)
-    plt.suptitle(f"Layer {layer} Attention Patterns")
-    plt.tight_layout()
+#     #plt.colorbar(im, ax=axes)
+#     plt.suptitle(f"Layer {layer} Attention Patterns")
+#     plt.tight_layout()
 
-    # Save as PNG
-    # plt.savefig(f"attention_layer_{layer}.png", dpi=150, bbox_inches="tight")
-    plt.show()
-    # plt.close()
+#     # Save as PNG
+#     # plt.savefig(f"attention_layer_{layer}.png", dpi=150, bbox_inches="tight")
+#     plt.show()
+#     # plt.close()
 
 # %% plot all layers and heads together
 fig, axes = plt.subplots(4, 8, figsize=(16, 8), sharex=True, sharey=True)  # Adjust based on n_heads
@@ -256,12 +257,44 @@ plt.tight_layout()
 plt.show()
 
 # %% table of standard deviation across games for all layers and heads together
+# n_heads = model.cfg.n_heads
+# n_layer_select = 4
+# std_all = dict()
+# for layer in range(n_layer_select):
+#     attention_pattern = pattern_list[layer].value
+#     std_all[layer] = attention_pattern.std(dim=0).mean(dim=(1,2)).numpy()
+
+# from rich.theme import Theme
+# light_theme = Theme({
+#     "header": "bold black",
+#     "layer": "bold black",
+#     "blue": "blue",
+#     "gray": "dim black",
+#     "red": "red",
+# })
+# console = Console(theme=light_theme, record=True)
+# table = Table(title="Attention Pattern Standard Deviation Across Games", show_lines=True, show_header=False)
+# for layer in range(n_layer_select):
+#     # row = [f"L{layer}"]
+#     row = []
+#     for head in range(n_heads):
+#         head_type = head_type_all[str(layer)][str(head)]
+#         head_color = color_map[head_type]
+#         row.append(f"[{head_color}]L{layer}H{head}: {std_all[layer][head]:.3f}[/{head_color}]")
+        
+#     table.add_row(*row)
+
+# console.print(table)
+
+# %% table of standard deviation (separate offsets) across games for all layers and heads together
 n_heads = model.cfg.n_heads
 n_layer_select = 4
+mean_all = dict()
 std_all = dict()
 for layer in range(n_layer_select):
     attention_pattern = pattern_list[layer].value
-    std_all[layer] = attention_pattern.std(dim=0).mean(dim=(1,2)).numpy()
+    mean_all[layer] = diagonal_offsets_mean(attention_pattern.mean(dim=0))
+    std_all[layer] = diagonal_offsets_mean(attention_pattern.std(dim=0))
 
 from rich.theme import Theme
 light_theme = Theme({
@@ -272,14 +305,23 @@ light_theme = Theme({
     "red": "red",
 })
 console = Console(theme=light_theme, record=True)
-table = Table(title="Attention Pattern Standard Deviation Across Games an", show_lines=True, show_header=False)
+table = Table(title="Attention Pattern Standard Deviation Across Games", show_lines=True, show_header=False)
 for layer in range(n_layer_select):
     # row = [f"L{layer}"]
     row = []
+    yours_mean, mine_mean, _ = mean_all[layer]
+    yours_std, mine_std, _ = std_all[layer]
     for head in range(n_heads):
         head_type = head_type_all[str(layer)][str(head)]
         head_color = color_map[head_type]
-        row.append(f"[{head_color}]L{layer}H{head}: {std_all[layer][head]:.3f}[/{head_color}]")
+        
+        # mean \u00B1 std
+        cell = (
+            f"[{head_color}]L{layer}H{head}[/{head_color}]:\n"
+            f"  [blue]\u03BC={mine_mean[head]:.3f}\n  \u03C3={mine_std[head]:.3f}[/blue]\n"
+            f"  [red]\u03BC={yours_mean[head]:.3f}\n  \u03C3={yours_std[head]:.3f}[/red]"
+        )
+        row.append(cell)
         
     table.add_row(*row)
 
