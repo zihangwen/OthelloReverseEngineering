@@ -133,24 +133,35 @@ def intervention_Direction(D_space, layers, tag):
     with t.no_grad(), model.trace(board_seqs_id):
         # for layer in range(1, model.cfg.n_layers):
         for layer in layers:
-            # layer-specific D
             if isinstance(D_space, dict):
+                # layer-specific D
                 D = D_space[layer]
             else:
                 D = D_space  # (d_model, x) where x is the number of directions stacked together
-
+            
+            Q, R = t.linalg.qr(D)
             # pattern = model.blocks[layer].attn.hook_pattern.output  # (batch, heads, seq_len, seq_len)
             hook_norm = model.blocks[layer].ln1.hook_normalized.output  # (batch, seq_len, d_model)
 
-            x = hook_norm.save()
+            x = hook_norm
 
-            # Solve min || D c − x ||²
-            # torch.linalg.lstsq expects (..., m, n) @ (..., n, k)
-            c = t.linalg.lstsq(D, x.reshape(-1, x.shape[-1]).T).solution
-            # c: (128, batch*seq)
+            # Columns of D are zero iff the corresponding diagonal of R is zero
+            valid = R.diag().abs() > 1e-6          # [n_vectors] boolean mask
+            Q_valid = Q[:, valid]                  # keep only non-degenerate basis vectors
 
             # Reconstruct projected x
-            x_proj = (D @ c).T.reshape_as(x)
+            if Q_valid.shape[1] == 0:
+                x_proj = t.zeros_like(x)
+            else:
+                x_proj = x @ Q_valid @ Q_valid.T
+
+            # # Solve min || D c − x ||²
+            # # torch.linalg.lstsq expects (..., m, n) @ (..., n, k)
+            # c = t.linalg.lstsq(D, x.reshape(-1, x.shape[-1]).T).solution
+            # # c: (128, batch*seq)
+
+            # # Reconstruct projected x
+            # x_proj = (D @ c).T.reshape_as(x)
 
             # remove x_proj components in the direction of the original x
             if tag == "remove_proj":
@@ -181,8 +192,8 @@ layers_chosen = [
     (1, 2, 3, 4, 5,),
     (1, 2, 3, 4, 5, 6, 7),
 ]
-# tag = "remove_proj"
-tag = "keep_proj"
+tag = "remove_proj"
+# tag = "keep_proj"
 # v_values_list = []
 # hook_norm_list = []
 valid_moves_BLRRC = test_data["games_batch_to_valid_moves_BLRRC"]  # (seq_len, 60)
@@ -201,10 +212,10 @@ for key in ["flipped", "just_played", "mine"]:
     dirs.append(d)
 
 # Stack: (num_probs, d_model, 8, 8)
-D = t.stack(dirs, dim=0)
+D = t.stack(dirs, dim=1)
 
 # Flatten everything except d_model
-D = D.reshape(-1, D.shape[1]).T                        # (d_model, 128)
+D = D.reshape(D.shape[0], -1)                        # (d_model, 128)
 D = t.nan_to_num(D)
 
 # Normalize and collect
@@ -228,6 +239,7 @@ D = t.nan_to_num(D)
 patch_accuracy_dict = {}
 kl_div_BL_dict = {}
 for layers in layers_chosen:
+    
     logits_patch_BLV = intervention_Direction(D, layers, tag)
 
     patch_accuracy = compute_top_n_accuracy(logits_patch_BLV, valid_moves_BLRRC)
