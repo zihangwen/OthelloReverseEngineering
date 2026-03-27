@@ -18,10 +18,8 @@ weights so the model learns to function well under this constraint.
 | `finetuning/mingpt/model.py` | `GPTConfig`, `GPT`, `Block` — imported as `finetuning.mingpt.model` |
 | `finetuning/mingpt/trainer.py` | `TrainerConfig`, `Trainer` — imported as `finetuning.mingpt.trainer` |
 | `finetuning/mingpt/dataset.py` | `CharDataset` — imported as `finetuning.mingpt.dataset` |
-| `finetuning/data/othello.py` | `get` — imported at module level after sys.path setup |
-
-We do **not** reuse anything from `finetuning_archive/load_model.py` or
-`finetuning_archive/finetuning_trainer.py`.
+| `utils/circuits_utils.py` | `construct_othello_dataset`, `to_device` |
+| `utils/probe_utils.py` | `load_fold_probes_and_normalize` |
 
 ---
 
@@ -38,9 +36,12 @@ finetuning/
 ├── data/                ← Othello game data utilities
 │   └── othello.py
 ├── model_probe.py       ← probe-constrained model (ProbeBlock, GPTWithProbeIntervention)
-├── trainer_probe.py     ← CE + KL training loop (ProbeTrainerConfig, ProbeTrainer)
-├── utils_probe.py       ← data loading utilities (load_probe_dirs, build_datasets)
-└── run.py               ← CLI entry point + run_finetuning orchestration
+├── trainer_probe.py     ← CE + KL training loop (ProbeModelTrainerConfig, ProbeModelTrainer)
+├── utils_probe.py       ← probe/data loading utilities
+├── run.py               ← CLI entry point + run_finetuning orchestration
+├── checkpoints/         ← saved .ckpt and .log files
+└── test/
+    └── test_ckpt.py     ← evaluate a saved checkpoint against the HF baseline
 ```
 
 ---
@@ -49,7 +50,7 @@ finetuning/
 
 ### Purpose
 Extends `mingpt/model.py` with classes that bake the probe-subspace projection
-into the value computation. Also includes the HF → mingpt weight loader.
+into the value computation. Also includes the HF weight loader.
 
 ### Intervention logic (from `attention_intervention.py`)
 
@@ -71,15 +72,16 @@ v        = W_V(x_v) + b_V               # value from probe-projected input
 - No `Q_valid` here — projection lives in `ProbeBlock`
 
 #### `ProbeBlock(nn.Module)`
-- Holds `Q_valid` as a registered buffer
+- Holds `Q_valid` as a registered buffer (fixed, not trained)
 - Computes `x_raw = F.layer_norm(x, [C])` (no weight/bias)
 - Computes `x_v = (x_raw @ Q_valid @ Q_valid.T) * ln1.weight + ln1.bias`
 - Passes `(x_ln, x_v)` to `ProbeProjectedAttention`
 
 #### `GPTWithProbeIntervention(GPT)`
 - `intervention_layers`: list of layer indices to replace with `ProbeBlock`
-- `probe_dirs`: `(d_model, n_dirs)` tensor or `dict[int → Tensor]`
-- `load_pretrained_from_hf(hf_model_name)`: maps HF weights to mingpt keys
+- `probe_dirs`: `(d_model, n_dirs)` tensor **or** `dict[int → Tensor]` for per-layer dirs
+- `load_pretrained_from_hf(hf_model_name)`: loads `final.pth` directly with `strict=False`
+  (Q_valid buffers absent from HF checkpoint are kept from `__init__`)
 
 ---
 
@@ -95,78 +97,114 @@ Training loop for `GPTWithProbeIntervention` with a combined
 ```
 L = CE(logits, targets) + β * KL(p_finetuned || p_original)
 ```
-- CE is the standard next-move prediction loss
-- KL anchors the output distribution to the original unintervened OthelloGPT,
-  preventing the downstream weights from drifting too far
-- Implemented as `F.kl_div(log_p_ref, p_finetuned)` since
-  `F.kl_div(input, target) = KL(target || input)`
+- CE is the standard next-move prediction loss (`ignore_index=0` for padding token)
+- KL anchors the output distribution to the original unintervened OthelloGPT
+- `kl_weight=0` recovers pure CE
+
+**Reference model:**
+- Built as `GPTWithProbeIntervention(..., intervention_layers=[])` — no intervention
+- Loaded from HF at trainer init; all parameters frozen
+- Used only inside `torch.no_grad()` during the KL computation
 
 **Freezing strategy:**
-- `freeze_up_to: int` — freeze all blocks with index ≤ this value (including
-  embeddings and the ProbeBlock itself)
-- Only downstream blocks (index > `freeze_up_to`) and the unembedding are trained
-- This isolates the question: can downstream layers decode probe-projected V well?
+- `freeze_up_to: int` — freeze embeddings + blocks `0..freeze_up_to` (-1 = freeze nothing)
+- Only blocks with index > `freeze_up_to` and the unembedding are trained
 
 ### Classes
 
 #### `ProbeModelTrainerConfig(TrainerConfig)`
 Extends `TrainerConfig` with:
 - `kl_weight: float = 0.1` — β for the KL term
-- `freeze_up_to: int = -1` — freeze blocks 0..freeze_up_to (-1 = freeze nothing)
-- `ref_model_name: str` — HF name of the reference model for KL
+- `freeze_up_to: int = -1` — freeze blocks 0..N (-1 = freeze nothing)
+- `ref_model_name: str` — HF repo name for the reference model
 
 #### `ProbeModelTrainer(Trainer)`
 Extends `Trainer` with:
 - Loads reference model at init for KL computation
 - Freezes parameters according to `freeze_up_to`
-- Overrides loss computation to add `β * KL(p_finetuned || p_ref)`
+- Overrides `_compute_loss` to add `β * KL(p_finetuned || p_ref)`
+- Saves checkpoint only when test loss improves (if test set provided)
 
 ---
 
 ## File 3: `utils_probe.py`
 
 ### Purpose
-Data loading utilities. Kept separate from the training loop so
-`trainer_probe.py` stays focused on the loss and training.
+Probe direction and dataset loading utilities. Imports `to_device` from
+`utils.circuits_utils` and re-exports it so callers only need one import.
 
 ### Functions
 
-#### `load_probe_dirs(probe_keys, probe_layer, device) -> Tensor`
-- Calls `utils.probe_utils.load_fold_probes_and_normalize`
-- Selects `probes[key][probe_layer]` for each key, normalises, stacks
-- Returns `(d_model, n_dirs)` tensor, NaN-cleaned
+#### `to_device(data, device)` *(re-exported from `utils.circuits_utils`)*
+Recursively moves tensors in a nested structure (dict, list, Tensor) to device.
 
-#### `build_datasets(data_path, test_fraction=0.05) -> (CharDataset, CharDataset)`
-- Loads from `.pickle`/`.pkl` or from `data/othello.py` for directory inputs
-- Returns `(train_dataset, test_dataset)`
+#### `load_probe_dirs(probe_keys, probe_layer, device) -> Tensor`
+- Returns a single `(d_model, n_dirs)` tensor using the same `probe_layer` for all
+  intervention layers
+- Column-normalised, NaN-cleaned
+
+#### `load_probe_dirs_per_layer(probe_keys, intervention_layers, device) -> dict[int, Tensor]`
+- Returns `{layer_i: (d_model, n_dirs)}` — each layer uses its own layer-i probe vectors
+- Calls the shared `_stack_probe_dirs` helper internally (same as `load_probe_dirs`)
+
+#### `build_datasets(n_train, n_test) -> (CharDataset, CharDataset | None)`
+- Loads from the HF Othello dataset via `construct_othello_dataset`
+- `n_test=0` returns `None` for the test dataset
 
 ---
 
 ## File 4: `run.py`
 
 ### Purpose
-CLI entry point and top-level orchestration. Contains both `parse_args` and
-`run_finetuning` so all pipeline logic lives in one place alongside the flags
-that configure it.
+CLI entry point and top-level orchestration. Logging goes to both stdout and
+a `.log` file co-located with `--ckpt_path` (e.g. `checkpoints/probe_ft.log`).
 
 ### Flags
 
 | Flag | Default | Description |
 |---|---|---|
 | `--hf_model_name` | `"Baidicoot/Othello-GPT-Transformer-Lens"` | HF repo to load weights from |
-| `--data_path` | (required) | Path to pickled Othello games |
-| `--probe_keys` | `mine flipped just_played` | Space-separated probe names |
-| `--probe_layer` | `5` | Which layer's probes to use for projection |
-| `--intervention_layers` | all layers | Which model layers get ProbeBlock |
-| `--freeze_up_to` | `-1` | Freeze blocks 0..N during finetuning |
+| `--n_train` | `20_000_000` | Max training sequences (capped at ~792k available) |
+| `--n_test` | `0` | Test sequences; 0 = no test set |
+| `--probe_keys` | `mine flipped just_played` | Probe names for the V subspace |
+| `--probe_layer` | `5` | Single layer's probes to use; ignored when `--per_layer_probe` is set |
+| `--per_layer_probe` | flag | Use layer-i probe dirs for layer-i intervention |
+| `--intervention_layers` | `None` | Layer indices for ProbeBlock (0-indexed); empty = no intervention |
+| `--freeze_up_to` | `-1` | Freeze blocks 0..N during finetuning (-1 = freeze nothing) |
 | `--kl_weight` | `0.1` | β for the KL divergence term |
 | `--max_epochs` | `10` | |
 | `--batch_size` | `64` | |
-| `--learning_rate` | `1e-4` | Lower than pretraining |
+| `--learning_rate` | `1e-4` | Lower than pretraining 3e-4 |
 | `--weight_decay` | `0.1` | |
-| `--lr_decay` | flag | Enable cosine LR decay |
-| `--ckpt_path` | `None` | Where to save checkpoints |
-| `--device` | `cuda` | |
+| `--lr_decay` | flag | Enable cosine LR decay with linear warmup |
+| `--num_workers` | `0` | DataLoader workers |
+| `--ckpt_path` | `None` | Path to save best checkpoint; `.log` written alongside it |
+| `--device` | `cuda` | `cuda`, `cuda:0`, `cpu`, etc. |
+
+---
+
+## File 5: `test/test_ckpt.py`
+
+### Purpose
+Evaluate a saved checkpoint against two baselines on `TEST_SIZE=500` test games.
+
+### Models compared
+
+| Label | Weights | Intervention |
+|---|---|---|
+| `clean` | HF pretrained | none |
+| `ref (HF, interv.)` | HF pretrained | `INTERVENTION_LAYERS` with probe dirs |
+| `finetuned ckpt` | `CKPT_PATH` | `INTERVENTION_LAYERS` with probe dirs |
+
+### Key config constants
+- `CKPT_PATH` — path to the `.ckpt` file to evaluate
+- `INTERVENTION_LAYERS` — must match what was used during training
+- `PER_LAYER_PROBE` — set `True` to use per-layer probe dirs (calls `load_probe_dirs_per_layer`);
+  `False` uses a single `PROBE_LAYER`
+
+### Metrics reported
+- **Accuracy**: top-n valid-move accuracy via `compute_top_n_accuracy`
+- **KL**: mean KL divergence from the clean baseline logits
 
 ---
 
@@ -175,24 +213,26 @@ that configure it.
 1. **Import from `mingpt/`, do not copy.** `finetuning/` is a proper package
    (has `__init__.py`); all mingpt classes are imported directly.
 
-2. **`trainer_probe.py` is training-only.** Utility functions live in `utils.py`.
-   This keeps the training loop focused and testable independently.
+2. **`probe_dirs` accepts tensor or dict.** A flat tensor uses one fixed probe layer
+   for all intervened layers; a `dict[int → Tensor]` uses each layer's own probe
+   directions. The model handles both in `__init__` — callers choose via
+   `--per_layer_probe` in `run.py` or `PER_LAYER_PROBE` in `test_ckpt.py`.
 
 3. **CE + KL loss.** Cross-entropy trains next-move prediction under the
    constraint; KL prevents unbounded drift from the original model's output
-   distribution. `kl_weight=0` recovers pure CE; `kl_weight→∞` freezes output
-   distribution entirely.
+   distribution. `kl_weight=0` recovers pure CE.
 
 4. **Freezing via `freeze_up_to`.** Cleaner than a soft KL penalty for
-   controlling early-layer drift. Freezing blocks 0..N and training N+1 onward
-   isolates whether downstream layers can adapt to probe-projected V.
+   controlling early-layer drift.
 
 5. **Only V is constrained.** K and Q use the full LN-normalised input,
    matching the intervention in `attention_intervention.py`.
 
 6. **`Q_valid` as `register_buffer`.** Not a trainable parameter — excluded
-   from `configure_optimizers` automatically. Stays fixed at QR-factorised
-   probe directions throughout training.
+   from `configure_optimizers` automatically. Saved in the checkpoint and
+   restored by `load_state_dict(strict=True)` in `test_ckpt.py`.
 
-7. **`strict=False` in `load_state_dict`.** `Q_valid` buffers are not in the
-   HF checkpoint; they are pre-computed and left at their QR values.
+7. **`strict=False` in `load_pretrained_from_hf`.** `Q_valid` buffers are not in
+   the HF checkpoint; they are pre-computed from the probe dirs in `__init__`.
+   In `test_ckpt.py`, loading from our own checkpoint uses `strict=True` since
+   all keys including `Q_valid` are present.
