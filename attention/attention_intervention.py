@@ -141,7 +141,7 @@ def intervention_Direction(D_space, layers, tag):
             
             Q, R = t.linalg.qr(D)
             # pattern = model.blocks[layer].attn.hook_pattern.output  # (batch, heads, seq_len, seq_len)
-            hook_norm = model.blocks[layer].ln1.hook_normalized.output  # (batch, seq_len, d_model)
+            hook_norm = model.blocks[layer].ln1.output  # (batch, seq_len, d_model)
 
             x = hook_norm
 

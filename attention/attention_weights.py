@@ -351,7 +351,7 @@ light_theme = Theme({
     "red": "red",
 })
 
-probe_name1, probe_name2 = probe_name_pair[2]
+probe_name1, probe_name2 = probe_name_pair[0]
 scores_values = scores_dict[f"{probe_name1}_to_{probe_name2}"]
 console = Console(theme=light_theme, record=True)
 
