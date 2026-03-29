@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 BASE_PATH = Path(os.path.dirname(os.path.dirname(__file__)))
 os.chdir(BASE_PATH)
 
-from attention_analysis.attention_utils import (
+from board_state_analysis.board_state_utils import (
     setup_model_and_probes,
     load_test_dataset,
     load_head_types,
@@ -23,7 +23,7 @@ from attention_analysis.attention_utils import (
 device = "cuda:1" if t.cuda.is_available() else "cpu"
 print(f"Using device: {device}")
 
-FIG_DIR = BASE_PATH / "attention_analysis" / "fig" / "attention_attn_patterns"
+FIG_DIR = BASE_PATH / "board_state_analysis" / "fig" / "attention_attn_patterns"
 os.makedirs(FIG_DIR, exist_ok=True)
 
 # %%
@@ -75,7 +75,7 @@ with t.no_grad(), model.trace(board_seqs_id):
 #         else:
 #             head_type_all[layer][head] = "Other"
 
-# with open("attention_analysis/attention_head_types.json", "w") as f:
+# with open("board_state_analysis/attention_head_types.json", "w") as f:
 #     json.dump(head_type_all, f, indent=4, sort_keys=True)
 
 

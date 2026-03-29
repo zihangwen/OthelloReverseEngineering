@@ -11,7 +11,7 @@ from rich.theme import Theme
 BASE_PATH = Path(os.path.dirname(os.path.dirname(__file__)))
 os.chdir(BASE_PATH)
 
-from attention_analysis.attention_utils import (
+from board_state_analysis.board_state_utils import (
     setup_model_and_probes,
     load_head_types,
     extract_weight_matrices,
@@ -26,7 +26,7 @@ from utils.arena_utils import label_to_square
 device = "cuda:1" if t.cuda.is_available() else "cpu"
 print(f"Using device: {device}")
 
-FIG_DIR = BASE_PATH / "attention_analysis" / "fig" / "attention_weights"
+FIG_DIR = BASE_PATH / "board_state_analysis" / "fig" / "attention_weights"
 os.makedirs(FIG_DIR, exist_ok=True)
 
 # %%

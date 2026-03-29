@@ -8,26 +8,6 @@ Consolidates the repeated boilerplate found across:
   attention_attr_blocks_w_heads.py, attention_attn_patterns.py,
   attention_source_seq_to_dst.py, multiple_games.py
 
-Usage (at the top of any experiment script):
-    from attention_analysis.attention_utils import (
-        setup_model_and_probes,
-        load_test_dataset,
-        stack_residual_streams,
-        load_head_types,
-        stratify_heads,
-        get_head_color,
-        HEAD_COLOR_MAP,
-        extract_weight_matrices,
-        compute_W_OV,
-        compute_W_QK,
-        compute_W_OV_full,
-        compute_W_QK_full,
-        topk_accuracy,
-        botk_accuracy,
-        compute_f1,
-        plot_probe_heatmap_grid,
-        plot_board_comparison,
-    )
 """
 
 import json
@@ -278,7 +258,7 @@ def compute_probe_projections(
 # ---------------------------------------------------------------------------
 
 def load_head_types(
-    json_path: str = "attention/attention_head_types.json",
+    json_path: str = "board_state_analysis/attention_head_types.json",
 ) -> dict[str, dict[str, str]]:
     """Load head type labels; returns {str(layer): {str(head): type_str}}."""
     with open(json_path, "r") as f:

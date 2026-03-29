@@ -17,7 +17,7 @@ BASE_PATH = Path(os.path.dirname(os.path.dirname(__file__)))
 os.chdir(BASE_PATH)
 
 import utils.othello_utils as othello_utils
-from attention_analysis.attention_utils import (
+from board_state_analysis.board_state_utils import (
     setup_model_and_probes,
     load_test_dataset,
     stack_residual_streams,
@@ -29,7 +29,7 @@ from attention_analysis.attention_utils import (
 device = "cuda:1" if t.cuda.is_available() else "cpu"
 print(f"Using device: {device}")
 
-FIG_DIR = BASE_PATH / "attention_analysis" / "fig" / "F1_score"
+FIG_DIR = BASE_PATH / "board_state_analysis" / "fig" / "F1_score"
 os.makedirs(FIG_DIR, exist_ok=True)
 
 # %%

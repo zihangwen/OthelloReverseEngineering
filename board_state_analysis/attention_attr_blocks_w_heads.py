@@ -16,7 +16,7 @@ from matplotlib.colors import ListedColormap
 BASE_PATH = Path(os.path.dirname(os.path.dirname(__file__)))
 os.chdir(BASE_PATH)
 
-from attention_analysis.attention_utils import (
+from board_state_analysis.board_state_utils import (
     setup_model_and_probes,
     load_test_dataset,
     load_head_types,
@@ -29,7 +29,7 @@ import utils.arena_utils as arena_utils
 device = "cuda:1" if t.cuda.is_available() else "cpu"
 print(f"Using device: {device}")
 
-FIG_DIR = BASE_PATH / "attention_analysis" / "fig" / "attention_attr_blocks_w_heads"
+FIG_DIR = BASE_PATH / "board_state_analysis" / "fig" / "attention_attr_blocks_w_heads"
 os.makedirs(FIG_DIR, exist_ok=True)
 
 # %%

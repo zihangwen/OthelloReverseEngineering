@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 BASE_PATH = Path(os.path.dirname(os.path.dirname(__file__)))
 os.chdir(BASE_PATH)
 
-from attention_analysis.attention_utils import (
+from board_state_analysis.board_state_utils import (
     setup_model_and_probes,
     load_test_dataset,
     plot_neuron_weight_projections,
@@ -28,7 +28,7 @@ import utils.othello_utils as othello_utils
 device = "cuda:1" if t.cuda.is_available() else "cpu"
 print(f"Using device: {device}")
 
-FIG_DIR = BASE_PATH / "attention_analysis" / "fig" / "mlp_neuron_attribution"
+FIG_DIR = BASE_PATH / "board_state_analysis" / "fig" / "mlp_neuron_attribution"
 os.makedirs(FIG_DIR, exist_ok=True)
 
 # %%

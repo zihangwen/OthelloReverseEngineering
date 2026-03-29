@@ -22,7 +22,7 @@ os.chdir(BASE_PATH)
 from rich.table import Table
 from rich.console import Console
 
-from attention_analysis.attention_utils import load_test_dataset
+from board_state_analysis.board_state_utils import load_test_dataset
 import utils.othello_utils as othello_utils
 from utils.helper_fns import compute_top_n_accuracy, compute_kl_divergence
 
@@ -33,7 +33,7 @@ from finetuning.utils_probe import load_probe_dirs_per_layer, to_device
 device = "cuda:1" if t.cuda.is_available() else "cpu"
 print(f"Using device: {device}")
 
-FIG_DIR = BASE_PATH / "attention_analysis" / "fig" / "attention_intervention_ft"
+FIG_DIR = BASE_PATH / "board_state_analysis" / "fig" / "attention_intervention_ft"
 os.makedirs(FIG_DIR, exist_ok=True)
 
 # ── config ────────────────────────────────────────────────────────────────────
