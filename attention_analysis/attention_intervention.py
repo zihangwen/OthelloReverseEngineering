@@ -116,7 +116,7 @@ layers_chosen = [
 ]
 
 probe_sets = {
-    "mine_flipped_played": ["flipped", "just_played", "mine"],
+    "flipped_played_mine": ["flipped", "just_played", "mine"],
     "flipped_played":      ["flipped", "just_played"],
 }
 

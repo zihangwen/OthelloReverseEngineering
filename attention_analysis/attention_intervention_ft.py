@@ -77,7 +77,11 @@ random_dirs_all = {
     layer: random_D
     for layer in probe_dirs_all.keys()
 }
-
+zero_D = t.zeros_like(probe_dirs_all[0])
+zero_dirs_all = {
+    layer: zero_D
+    for layer in probe_dirs_all.keys()
+}
 
 def build_model(intervention_layers, probe_dirs):
     """HF pretrained weights with the given intervention layers and directions."""
@@ -128,18 +132,22 @@ for layers in LAYERS_SWEEP:
         results[layers] = {
             "probe_acc": clean_acc, "probe_kl": 0.0,
             "rand_acc":  clean_acc, "rand_kl":  0.0,
+            "zero_acc":  clean_acc, "zero_kl":  0.0,
             "ft_acc": None, "ft_kl": None,
         }
         continue
 
     logits_probe = run(build_model(layers, probe_dirs_all))
     logits_rand  = run(build_model(layers, random_dirs_all))
+    logits_zero = run(build_model(layers, zero_dirs_all))
 
     results[layers] = {
         "probe_acc": compute_top_n_accuracy(logits_probe, valid_moves_BLRRC)[-1],
         "probe_kl":  compute_kl_divergence(logits_clean, logits_probe).mean().item(),
         "rand_acc":  compute_top_n_accuracy(logits_rand,  valid_moves_BLRRC)[-1],
         "rand_kl":   compute_kl_divergence(logits_clean, logits_rand).mean().item(),
+        "zero_acc": compute_top_n_accuracy(logits_zero,  valid_moves_BLRRC)[-1],
+        "zero_kl":  compute_kl_divergence(logits_clean, logits_zero).mean().item(),
         "ft_acc":    ft_acc if tuple(layers) == CKPT_LAYERS else None,
         "ft_kl":     ft_kl  if tuple(layers) == CKPT_LAYERS else None,
     }
@@ -155,6 +163,8 @@ table.add_column("Probe Accu.",      style="light_green", justify="right")
 table.add_column("Probe KL",         style="green",       justify="right")
 table.add_column("Random Accu.",     style="red",         justify="right")
 table.add_column("Random KL",        style="red",         justify="right")
+table.add_column("Zero Accu.",       style="yellow",      justify="right")
+table.add_column("Zero KL",          style="yellow",      justify="right")
 table.add_column("FT Accu.",         style="magenta",     justify="right")
 table.add_column("FT KL",            style="magenta",     justify="right")
 
@@ -166,6 +176,7 @@ for layers, res in results.items():
         label,
         f"{res['probe_acc'] * 100:.2f}%", f"{res['probe_kl']:.4f}",
         f"{res['rand_acc']  * 100:.2f}%", f"{res['rand_kl']:.4f}",
+        f"{res['zero_acc'] * 100:.2f}%", f"{res['zero_kl']:.4f}",
         ft_acc_str, ft_kl_str,
     )
 
