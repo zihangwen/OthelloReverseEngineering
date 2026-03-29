@@ -126,7 +126,7 @@ def parse_args():
 
     # Probe directions
     parser.add_argument(
-        "--probe_keys", nargs="+", default=["mine", "flipped", "just_played"],
+        "--probe_keys", nargs="+", default=["flipped", "just_played", "mine"],
         help="Which probe directions to use for the V-vector subspace "
              "(default: mine flipped just_played).",
     )

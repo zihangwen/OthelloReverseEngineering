@@ -117,7 +117,9 @@ class ProbeBlock(nn.Module):
         x_raw = F.layer_norm(x, [x.shape[-1]])                      # (x − mean) / std
 
         # Project in raw-normalised space, then re-apply LN weight/bias
-        x_v = (x_raw @ self.Q_valid @ self.Q_valid.T) * self.ln1.weight + self.ln1.bias
+        x_proj = x_raw @ self.Q_valid @ self.Q_valid.T  # project in raw-normalised space
+        x_proj = x_proj - x_proj.mean(-1, keepdim=True)
+        x_v = x_proj * self.ln1.weight + self.ln1.bias
 
         updt, att = self.attn(x_ln, x_v)
         x = x + updt
