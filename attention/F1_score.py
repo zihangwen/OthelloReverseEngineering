@@ -267,7 +267,7 @@ func_mine = einops.einsum(
 best_thresholds_botk = np.stack([
     botk_accuracy(
         func_mine[game, seq, layer, func],
-        played_and_flipped_squares.cpu().numpy()[game, seq]
+        flipped_squares_expanded.cpu().numpy()[game, seq]
     )[0]
     for game in range(test_size)
     for seq in range(start_move, n_moves)

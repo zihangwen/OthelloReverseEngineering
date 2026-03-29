@@ -33,36 +33,10 @@ import utils.circuits_utils as circuits_utils
 from utils.arena_utils import (
     label_to_square,
 )
-import utils.othello_utils as othello_utils
 from utils.probe_utils import (
     # load_probes_and_normalize,
     load_fold_probes_and_normalize,
 )
-import utils.arena_utils as arena_utils
-from utils.helper_fns import (
-    get_board_states_and_legal_moves,
-)
-#     # MIDDLE_SQUARES,
-#     neuron_intervention,
-#     ALL_SQUARES,
-#     
-#     calculate_ablation_scores_game_move,
-#     calculate_ablation_scores_square,
-#     calculate_ablation_scores_square_probability,
-#     # plot_probe_outputs,
-#     get_w_in,
-#     # get_w_out,
-#     calculate_neuron_input_weights,
-#     calculate_neuron_output_weights,
-#     create_feature_names,
-#     get_neuron_decision_tree,
-#     get_neuron_binary_decision_tree,
-#     # visualize_decision_tree,
-# )
-# from simulate_activations_with_dts import (
-#     compute_kl_divergence,
-#     compute_top_n_accuracy,
-# )
 
 device = "cuda:1" if t.cuda.is_available() else "cpu"
 t.set_grad_enabled(False)
