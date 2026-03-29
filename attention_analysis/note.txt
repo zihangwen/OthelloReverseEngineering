@@ -1,0 +1,29 @@
+
+- normalized probe
+
+- attention_weights.py
+    - Analyzes QK and OV circuits; cosine similarity between probe dirs through weight matrices
+        - normalize (probe @ QK)
+    - probe: per layer
+
+- attention_attn_patterns.py
+    - 500 games.
+    - averaged mean and std
+
+- attention_attr_blocks_w_heads.py
+    - game 0, move ~9
+    - probe_layer_specific (SHOULD I CHANGE?????)
+
+- F1_score.py
+    - 500 games
+    - start_move, n_moves = 8, 30
+    - probe: per layer (old results with probe_layer_specific)
+
+- mlp_neuron_attribution.py
+    - 500 games
+    - square_idx = 18
+    - normalized w_in and w_out (cosine similarity)
+    - probe: per layer (old results with probe_layer_specific)
+
+- attention_intervention.py
+    - probe: per layer (old results with probe_layer_specific)
