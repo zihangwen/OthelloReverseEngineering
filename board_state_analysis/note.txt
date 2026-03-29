@@ -25,5 +25,5 @@
     - normalized w_in and w_out (cosine similarity)
     - probe: per layer (old results with probe_layer_specific)
 
-- attention_intervention.py
+- attention_intervention_ft.py / attention_intervention.py
     - probe: per layer (old results with probe_layer_specific)

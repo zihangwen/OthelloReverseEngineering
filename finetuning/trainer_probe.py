@@ -21,6 +21,7 @@ class ProbeModelTrainerConfig(TrainerConfig):
     kl_weight      = 0.1   # β — weight of the KL term; 0 = pure CE
     freeze_up_to   = -1    # freeze blocks 0..N (-1 = freeze nothing)
     ref_model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
+    device         = "cuda" if torch.cuda.is_available() else "cpu"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -35,12 +36,12 @@ class ProbeModelTrainer(Trainer):
     """
 
     def __init__(self, model, train_dataset, test_dataset, config: ProbeModelTrainerConfig):
-        # Skip Trainer's DataParallel wrapping — use a single GPU (cuda:0) directly.
+        # Skip Trainer's DataParallel wrapping — use a single GPU directly.
         self.model        = model
         self.train_dataset = train_dataset
         self.test_dataset  = test_dataset
         self.config        = config
-        self.device        = "cuda:0" if torch.cuda.is_available() else "cpu"
+        self.device        = config.device
         self.model         = self.model.to(self.device)
 
         # Load reference model (original OthelloGPT, no intervention) for KL term.

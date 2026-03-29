@@ -98,6 +98,7 @@ def run_finetuning(args):
         kl_weight      = args.kl_weight,
         freeze_up_to   = args.freeze_up_to,
         ref_model_name = args.hf_model_name,
+        device         = device,
     )
     trainer = ProbeModelTrainer(model, train_dataset, test_dataset, trainer_config)
     trainer.train()
