@@ -57,6 +57,8 @@ with t.no_grad(), model.trace(board_seqs_id):
 
 # %% calculate head types based on attention patterns, save to JSON for later use in other analyses (e.g. attention attribution blocks)
 # attention_attn_patterns.py
+# from collections import defaultdict
+# import json
 # head_type_all = defaultdict(dict)
 # for layer in range(model.cfg.n_layers):
 #     attention_pattern = pattern_list[layer].value
@@ -69,15 +71,25 @@ with t.no_grad(), model.trace(board_seqs_id):
 #         even = even_mean[head].item()
 #         odd = odd_mean[head].item()
 #         if even > 2 * odd:
-#             head_type_all[layer][head] = "Yours head"
+#             head_type_all[layer][head] = "YOURS"
 #         elif odd > 2 * even:
-#             head_type_all[layer][head] = "Mine head"
+#             head_type_all[layer][head] = "MINE"
 #         else:
-#             head_type_all[layer][head] = "Other"
+#             head_type_all[layer][head] = "Uniform"
 
 # with open("board_state_analysis/attention_head_types.json", "w") as f:
 #     json.dump(head_type_all, f, indent=4, sort_keys=True)
 
+# %% head_type_all rename
+# for layer in range(n_layers):
+#     for head in range(n_heads):
+#         ht = head_type_all[str(layer)][str(head)]
+#         if ht == "Yours head":
+#             head_type_all[str(layer)][str(head)] = "YOURS"
+#         elif ht == "Mine head":
+#             head_type_all[str(layer)][str(head)] = "MINE"
+#         else:
+#             head_type_all[str(layer)][str(head)] = "Uniform"
 
 # %% Mean attention pattern: all layers × heads
 n_layer_select = 4
@@ -131,7 +143,7 @@ for layer in range(n_layer_select):
 light_theme = Theme({"blue": "blue", "gray": "dim black", "red": "red"})
 console = Console(theme=light_theme, record=True)
 table = Table(
-    title="Attention Pattern Diagonal Offset Stats (Mine=blue/odd, Yours=red/even)",
+    title="Attention Pattern Diagonal Offset Stats (MINE=blue/odd, YOURS=red/even)",
     show_lines=True, show_header=False,
 )
 for layer in range(n_layer_select):

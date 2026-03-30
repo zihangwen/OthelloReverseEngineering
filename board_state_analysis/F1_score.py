@@ -179,7 +179,7 @@ fn = ((binarized_mine == 0) & (flipped_exp == 1)).sum(axis=(4, 5))
 f1_mine = compute_f1(tp, fp, fn)["f1"]
 
 fig, axs = plt.subplots(n_funcs, n_layers, figsize=(3 * n_layers, 3 * n_funcs + 1.5))
-fig.suptitle("F1 Score: Writing to Mine Direction (Played+Flipped) Across Layers", fontsize=16)
+fig.suptitle("F1 Score: Writing to Mine Direction (Flipped) Across Layers", fontsize=16)
 for f in range(n_funcs):
     for l in range(n_layers):
         ax = axs[f, l] if n_funcs > 1 else axs[l]

@@ -53,9 +53,9 @@ GPT_CONFIG = GPTConfig(
 LAYERS_SWEEP = [
     (),
     (0,),
-    (1, 2, 3, 4, 5, 6, 7),
-    (1, 2, 3, 4, 5),
     (0, 1, 2, 3, 4, 5, 6, 7),
+    (1, 2, 3, 4, 5),
+    (1, 2, 3, 4, 5, 6, 7),
 ]
 
 # %%
@@ -85,10 +85,9 @@ zero_dirs_all = {
 
 def build_model(intervention_layers, probe_dirs):
     """HF pretrained weights with the given intervention layers and directions."""
-    dirs = {l: probe_dirs[l] for l in intervention_layers if l in probe_dirs}
     model = GPTWithProbeIntervention(
         GPT_CONFIG,
-        to_device(dirs, device),
+        to_device(probe_dirs, device),
         intervention_layers=list(intervention_layers),
     )
     model.load_pretrained_from_hf(HF_MODEL_NAME)
@@ -97,10 +96,9 @@ def build_model(intervention_layers, probe_dirs):
 
 def build_finetuned_model(probe_dirs):
     """Load finetuned checkpoint (only valid for CKPT_LAYERS)."""
-    dirs = {l: probe_dirs[l] for l in CKPT_LAYERS}
     model = GPTWithProbeIntervention(
         GPT_CONFIG,
-        to_device(dirs, device),
+        to_device(probe_dirs, device),
         intervention_layers=list(CKPT_LAYERS),
     )
     sd = t.load(CKPT_PATH, map_location=device, weights_only=True)

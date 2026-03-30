@@ -36,9 +36,9 @@ DEFAULT_MODEL = "Baidicoot/Othello-GPT-Transformer-Lens"
 DEFAULT_PROBE_LAYER = 5
 DEFAULT_STREAMS = ("resid_pre", "attn_out", "resid_mid", "mlp_out", "resid_post")
 HEAD_COLOR_MAP: dict[str, str] = {
-    "Yours head": "red",
-    "Mine head":  "blue",
-    "Other":      "gray",
+    "YOURS":   "red",
+    "MINE":    "blue",
+    "Uniform": "gray",
 }
 
 ROW_LABELS = list("ABCDEFGH")

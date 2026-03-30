@@ -85,44 +85,43 @@ for probe_name in probe_name_list:
 # %% Plot 1: single layer, all head types, per source move
 head_types = ["mine_heads", "yours_heads", "other_heads"]
 color_map = {"yours_heads": "red", "mine_heads": "blue", "other_heads": "gray"}
-layer_chosen = 5
+for layer_chosen in range(n_layers):
+    board_seqs_square = t.tensor(test_data["decoded_inputs"])[game_idx, :n_moves].unsqueeze(0)
+    board_states, _, _ = get_board_states_and_legal_moves(board_seqs_square)
+    cmap_board = ListedColormap(["white", "gray", "black"])
 
-board_seqs_square = t.tensor(test_data["decoded_inputs"])[game_idx, :n_moves].unsqueeze(0)
-board_states, _, _ = get_board_states_and_legal_moves(board_seqs_square)
-cmap_board = ListedColormap(["white", "gray", "black"])
+    mine_probe_proj = probe_projs["mine"]
+    fig, axs = plt.subplots(len(head_types) + 1, n_moves, figsize=(3 * n_moves, 3 * (len(head_types) + 1) + 1.5))
+    fig.suptitle(f"Attention attribution per src move to dst {n_moves-1} @ Mine Probe (L{layer_chosen})", fontsize=16)
 
-mine_probe_proj = probe_projs["mine"]
-fig, axs = plt.subplots(len(head_types) + 1, n_moves, figsize=(3 * n_moves, 3 * (len(head_types) + 1) + 1.5))
-fig.suptitle(f"Attention attribution per src move to dst {n_moves-1} @ Mine Probe (L{layer_chosen})", fontsize=16)
-
-for move in range(n_moves):
-    ax = axs[0, move]
-    ax.imshow(board_states[0, move], cmap=cmap_board, vmin=-1.5, vmax=1.5)
-    label = arena_utils.to_board_label(board_seqs_square[0, move])
-    ax.set_title(f"Move {move} ({label})")
-    ax.set_xticks(range(8)); ax.set_yticks(range(8))
-    ax.set_yticklabels(list("ABCDEFGH"))
-
-# [0, -1]: batch=0, last query position -> [seq_k, 8, 8] (heads already summed)
-temp = [mine_probe_proj[layer_chosen][ht][0, -1] for ht in head_types]
-v_abs = max(abs(np.nanmin(temp)), abs(np.nanmax(temp)))
-
-for i, head_type in enumerate(head_types):
     for move in range(n_moves):
-        ax = axs[i + 1, move]
-        im = ax.imshow(mine_probe_proj[layer_chosen][head_type][0, -1, move],
-                       cmap="RdBu", aspect="auto", vmin=-v_abs, vmax=v_abs)
-        ax.set_title(f"L{layer_chosen} {head_type} Move {move}", color=color_map[head_type])
+        ax = axs[0, move]
+        ax.imshow(board_states[0, move], cmap=cmap_board, vmin=-1.5, vmax=1.5)
+        label = arena_utils.to_board_label(board_seqs_square[0, move])
+        ax.set_title(f"Move {move} ({label})")
         ax.set_xticks(range(8)); ax.set_yticks(range(8))
         ax.set_yticklabels(list("ABCDEFGH"))
 
-fig.subplots_adjust(right=0.92)
-fig.colorbar(im, cax=fig.add_axes([0.94, 0.15, 0.02, 0.7]))
-plt.tight_layout(rect=[0, 0.03, 0.92, 0.95])
-stem = f"head_attr_L{layer_chosen}"
-fig.savefig(FIG_DIR / f"{stem}.jpg", dpi=300, bbox_inches="tight")
-fig.savefig(FIG_DIR / f"{stem}.pdf", bbox_inches="tight")
-plt.show()
+    # [0, -1]: batch=0, last query position -> [seq_k, 8, 8] (heads already summed)
+    temp = [mine_probe_proj[layer_chosen][ht][0, -1] for ht in head_types]
+    v_abs = max(abs(np.nanmin(temp)), abs(np.nanmax(temp)))
+
+    for i, head_type in enumerate(head_types):
+        for move in range(n_moves):
+            ax = axs[i + 1, move]
+            im = ax.imshow(mine_probe_proj[layer_chosen][head_type][0, -1, move],
+                        cmap="RdBu", aspect="auto", vmin=-v_abs, vmax=v_abs)
+            ax.set_title(f"L{layer_chosen} {head_type} Move {move}", color=color_map[head_type])
+            ax.set_xticks(range(8)); ax.set_yticks(range(8))
+            ax.set_yticklabels(list("ABCDEFGH"))
+
+    fig.subplots_adjust(right=0.92)
+    fig.colorbar(im, cax=fig.add_axes([0.94, 0.15, 0.02, 0.7]))
+    plt.tight_layout(rect=[0, 0.03, 0.92, 0.95])
+    stem = f"head_attr_L{layer_chosen}"
+    fig.savefig(FIG_DIR / f"{stem}.jpg", dpi=300, bbox_inches="tight")
+    fig.savefig(FIG_DIR / f"{stem}.pdf", bbox_inches="tight")
+    plt.show()
 
 # %% Aggregate over all moves per block type
 # For head types: select batch=0, last query pos -> [seq_k, 8, 8], then sum over seq_k
