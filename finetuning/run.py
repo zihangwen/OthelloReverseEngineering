@@ -62,6 +62,20 @@ def run_finetuning(args):
         probe_dirs = load_probe_dirs(args.probe_keys, args.probe_layer, device)
         logger.info("Probe direction matrix shape: %s", tuple(probe_dirs.shape))
 
+    # 1b. Optionally replace with random directions (control condition)
+    if args.random_probe:
+        torch.manual_seed(args.random_seed)
+        if isinstance(probe_dirs, dict):
+            first = next(iter(probe_dirs.values()))
+            random_D = torch.randn_like(first)
+            random_D = random_D / random_D.norm(dim=0, keepdim=True)
+            probe_dirs = {layer: random_D for layer in probe_dirs}
+        else:
+            random_D = torch.randn_like(probe_dirs)
+            random_D = random_D / random_D.norm(dim=0, keepdim=True)
+            probe_dirs = random_D
+        logger.info("Using random probe directions (seed=%d)", args.random_seed)
+
     # 2. Datasets
     logger.info("Loading datasets (n_train=%d, n_test=%d)", args.n_train, args.n_test)
     train_dataset, test_dataset = build_datasets(
@@ -140,6 +154,14 @@ def parse_args():
         "--per_layer_probe", action="store_true",
         help="Use layer-i probe directions for layer-i intervention instead of a "
              "single fixed probe_layer.",
+    )
+    parser.add_argument(
+        "--random_probe", action="store_true",
+        help="Replace probe directions with random orthonormal directions (control condition).",
+    )
+    parser.add_argument(
+        "--random_seed", type=int, default=42,
+        help="Random seed for --random_probe (default: 42).",
     )
 
     # Intervention layer selection
