@@ -48,7 +48,7 @@ square = label_to_square(label)
 row, col = square // 8, square % 8
 
 probe_name_pair = [("flipped", "mine"), ("just_played", "mine"), ("mine", "mine")]
-n_layer_select = 4
+n_layer_select = 6
 
 all_cos_sims_dict = {}
 for probe_name1, probe_name2 in probe_name_pair:
@@ -84,7 +84,8 @@ for probe_name1, probe_name2 in probe_name_pair:
         data=all_cos_sims,
         n_rows=n_layer_select,
         n_cols=n_heads,
-        title=f"OV cosine sim: {probe_name1} → {probe_name2}",
+        # title=f"OV cosine sim: {probe_name1} → {probe_name2}",
+        title=None,
         cell_titles=cell_titles,
         cell_title_colors=cell_colors,
     )
@@ -140,10 +141,10 @@ console.print(table)
 # Mirrors the Rich table: rows = layers, columns = heads.
 # Each cell = head label (coloured by type) + 3 stacked percentages.
 # Requires in preamble: \usepackage{booktabs, makecell, xcolor}
-# Colour aliases expected:  \definecolor{minehead}{rgb}{0,0,1}   (blue)
-#                           \definecolor{yourshead}{rgb}{1,0,0}  (red)
-#                           \definecolor{otherhead}{rgb}{0.5,0.5,0.5} (gray)
-TEX_COLOR = {"Mine head": "minehead", "Yours head": "yourshead", "Other": "otherhead"}
+# Colour aliases expected:  \definecolor{darkblue}{rgb}{0,0,1}   (blue)
+#                           \definecolor{darkred}{rgb}{1,0,0}  (red)
+#                           \definecolor{gray}{rgb}{0.5,0.5,0.5} (gray)
+TEX_COLOR = {"MINE": "darkblue", "YOURS": "darkred", "Uniform": "gray"}
 
 for p1, p2 in probe_name_pair:
     key = f"{p1}_to_{p2}"
@@ -152,26 +153,20 @@ for p1, p2 in probe_name_pair:
     col_spec = "c" * n_heads  # one column per head, no extra columns
 
     lines = []
-    lines.append(r"% Required packages: booktabs, makecell, xcolor")
-    lines.append(r"% Define colours:  \definecolor{minehead}{rgb}{0,0,1}")
-    lines.append(r"%                  \definecolor{yourshead}{rgb}{1,0,0}")
-    lines.append(r"%                  \definecolor{otherhead}{rgb}{0.5,0.5,0.5}")
     lines.append(r"\begin{table}[ht]")
     lines.append(r"  \centering")
     lines.append(
         r"  \caption{OV cosine similarity scores: \texttt{"
         + p1.replace("_", r"\_") + r"} $\to$ \texttt{" + p2.replace("_", r"\_")
-        + r"} ($\tau=" + str(tau) + r"$). "
-        + r"Each cell: \textcolor{minehead}{head label}, "
-        + r"\textcolor{blue}{$>$$\tau$}, \textcolor{otherhead}{$|\cdot|\le\tau$}, \textcolor{yourshead}{$<$$-\tau$}.}"
+        + r"} ($\tau=" + str(tau) + r"$).}"
     )
     lines.append(r"  \label{tab:OV_cossim_" + key + r"}")
     lines.append(f"  \\begin{{tabular}}{{{col_spec}}}")
     lines.append(r"    \toprule")
 
     # Column header: H0 … H{n_heads-1}
-    lines.append("    " + " & ".join(f"H{h}" for h in range(n_heads)) + r" \\")
-    lines.append(r"    \midrule")
+    # lines.append("    " + " & ".join(f"H{h}" for h in range(n_heads)) + r" \\")
+    # lines.append(r"    \midrule")
 
     for layer in range(n_layer_select):
         cells = []
@@ -184,9 +179,9 @@ for p1, p2 in probe_name_pair:
             cell = (
                 r"\makecell{"
                 + f"\\textcolor{{{tc}}}{{L{layer}H{head}}} \\\\ "
-                + f"\\textcolor{{blue}}{{{s0*100:.1f}\\%}} \\\\ "
-                + f"\\textcolor{{otherhead}}{{{s1*100:.1f}\\%}} \\\\ "
-                + f"\\textcolor{{yourshead}}{{{s2*100:.1f}\\%}}"
+                + f"\\textcolor{{darkblue}}{{{s0*100:.1f}\\%}} \\\\ "
+                + f"\\textcolor{{gray}}{{{s1*100:.1f}\\%}} \\\\ "
+                + f"\\textcolor{{darkred}}{{{s2*100:.1f}\\%}}"
                 + r"}"
             )
             cells.append(cell)

@@ -38,9 +38,9 @@ os.makedirs(FIG_DIR, exist_ok=True)
 
 # ── config ────────────────────────────────────────────────────────────────────
 HF_MODEL_NAME  = "Baidicoot/Othello-GPT-Transformer-Lens"
-CKPT_PATH      = "finetuning/checkpoints/probe_ft_1_7_3probe_Lp.ckpt"
-CKPT_LAYERS    = (1, 2, 3, 4, 5, 6, 7)   # layers the checkpoint was trained on
-PROBE_KEYS     = ["flipped", "just_played", "mine"]
+CKPT_PATH      = "finetuning/checkpoints/probe_ft_1_5_2probe_Lp.ckpt"
+CKPT_LAYERS    = (1, 2, 3, 4, 5)   # layers the checkpoint was trained on
+PROBE_KEYS     = ["flipped", "just_played"]
 
 GPT_CONFIG = GPTConfig(
     vocab_size = 61,
